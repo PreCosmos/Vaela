@@ -7,11 +7,15 @@ for (const desktop of desktopsForActivity(currentActivity())) {
 }
 
 // Top bar: launcher and activity on the left, tray and clock on the right.
-// Phase 2 adds the Float / Auto Tiling / Scrollable switch at the far right.
+// Vela Shell supplies the layout switch at the far right.
 const topBar = new Panel;
 topBar.location = "top";
 topBar.height = 34;
 topBar.floating = false;
+topBar.alignment = "left";
+topBar.lengthMode = "custom";
+topBar.minimumLength = Math.max(320, screenGeometry(topBar.screen).width - 380);
+topBar.maximumLength = topBar.minimumLength;
 topBar.addWidget("org.kde.plasma.kickoff");
 topBar.addWidget("org.kde.plasma.showActivityManager");
 topBar.addWidget("org.kde.plasma.panelspacer");
@@ -35,14 +39,4 @@ tasks.writeConfig("launchers", [
     "applications:systemsettings.desktop",
 ]);
 
-// Workspace bar: hidden until the pointer touches the right edge.
-// A stock pager stands in until phase 3 replaces it with Vela's tab-style list.
-const workspaceBar = new Panel;
-workspaceBar.location = "right";
-workspaceBar.height = 220;
-workspaceBar.floating = true;
-workspaceBar.hiding = "autohide";
-const pager = workspaceBar.addWidget("org.kde.plasma.pager");
-pager.currentConfigGroup = ["General"];
-pager.writeConfig("displayedText", 1); // workspace names
-pager.writeConfig("showWindowIcons", true);
+// The tab-style workspace bar is supplied by vela-shell.

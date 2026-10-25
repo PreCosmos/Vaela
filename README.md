@@ -1,66 +1,86 @@
 # Vela
 
-A Wayland desktop that looks and works like the Vivaldi browser, built on KWin.
-It shows up as its own **Vela** session on the login screen and reuses Plasma's
-services and settings pages wherever they already do the job.
+A Wayland desktop inspired by Vivaldi, built on KWin and Plasma. Select **Vela**
+on the login screen. Vela uses Plasma's services and system settings pages.
 
-## Status
+## Desktop controls
 
-Phase 1: the Vela session, its default layout and the RPM. Logging into Vela gives
-a top bar, a dock that dodges windows and an auto-hiding workspace bar on the right.
+- The top-right switch selects **Float**, **Auto Tiling** (a grid), or
+  **Scrollable** (horizontal, full-height columns). The choice is saved per activity.
+  Drag a window edge to resize: Scrollable keeps an independent column width;
+  Auto Tiling shares the new column/row boundary with neighbouring windows.
+  Sizes are retained while the session and window remain open.
+  Float restores window geometry saved before automatic arrangement. Layouts exclude
+  dialogs, panels, pinned windows, minimized windows and fullscreen applications.
+- The right-edge workspace bar reveals vertical tabs on hover. Click to switch;
+  use **+ Workspace** to add and **⋮** to rename or remove. Hover for window titles.
+- **F2** opens Quick Commands. Type to filter, use arrows and Enter to execute.
+- Hold right-click still for **1 second** for the radial menu. Move toward an
+  action and release, or click an action after releasing in the centre. Escape cancels.
+- Right-drag draws gestures. Short clicks retain application context menus;
+  **Shift + right-click** bypasses gesture interception.
+- **Meta+Ctrl+S** opens Vela Settings: layouts, spacing, gesture sensitivity,
+  gesture bindings and links to Plasma's settings and shortcut editor.
 
-## Roadmap
-
-| Phase | What lands |
+| Gesture | Default action |
 |---|---|
-| 1 | Session at the login screen, default layout, RPM, dev container |
-| 2 | KWin script for Float / Auto Tiling / Scrollable per activity, and the switch at the top right of the top bar |
-| 3 | Workspace bar: workspaces as vertical tabs with stacks, colours and previews |
-| 4 | KWin plugin: mouse gestures, pie menu on a 1-second right-click hold, mouse-button and wheel shortcuts |
-| 5 | Pie menu and Quick Commands |
-| 6 | Vela Settings (shortcuts with a mouse column, gestures, layouts), White and Black themes |
+| Left / Right | Previous / next workspace |
+| Up / Down | Maximize or restore / minimize |
+| Down, Right | Close the window under the initial press |
+| Up, Down | Cycle layout |
+| Down, Up | Terminal |
+| Up, Left / Up, Right | Activities / Quick Commands |
+| Right, Up / Left, Up | Move window to next / previous workspace |
 
-HDR, sound, printers, keyboard, mouse, power and system info come from Plasma's own
-settings pages, which Vela Settings opens.
-
-## Layout
-
-| Path | Contents |
-|---|---|
-| `session/` | `startvela` and the `vela.desktop` login session |
-| `config/xdg/` | Config defaults used only in the Vela session |
-| `lookandfeel/org.vela.desktop/` | Plasma look-and-feel package, including the first-login panel layout |
-| `packaging/` | RPM spec |
-| `scripts/` | Dev container, RPM build and nested test run |
-| `docs/mockup/` | The original interactive HTML mockup, for reference |
+**Meta+Ctrl+Space** cycles layouts; **Meta+Ctrl+R** opens the radial menu.
+**Meta+Alt+Left/Right** focuses adjacent windows and scrolls columns into view.
+**Meta+Plus/Minus** widens/narrows the active column in Scrollable and Auto Tiling.
+These keys take priority over Plasma zoom while those layout modes are active.
+**Ctrl+Meta+Left/Right** moves the active Scrollable column left/right in the strip.
+It takes priority over Plasma workspace switching only in Scrollable mode.
+**Meta+Ctrl+Alt+Left/Right** also narrows/widens columns; **Meta+Ctrl+Alt+Up/Down**
+shrinks/grows tiled rows. Scrollable columns always use the available height.
+Bindings and settings live in `~/.config/velarc`. The workspace bar currently
+uses title previews; workspace stacks and live thumbnails remain future work.
 
 ## Developing
 
-Everything builds and runs in a Fedora 45 distrobox called `vela-dev`, whose home is
-`.devbox/home` in this folder.
-
 ```bash
 ./scripts/dev-container.sh
-```
-
-Run Vela in a window on your current desktop, with a throwaway home:
-
-```bash
 ./scripts/run-nested.sh --fresh
-```
-
-Build the RPM into `rpms/`:
-
-```bash
 ./scripts/build-rpm.sh
 ```
+
+The Fedora 45 distrobox `vela-dev` holds build dependencies. Its home is
+`.devbox/home`. Native plugins must be rebuilt for each KWin version; RPMs depend
+on the exact KWin version used to build them. The plugin and shell only activate
+when `VELA_SESSION=1`; other desktop sessions remain unaffected.
+
+`./scripts/test-headless.sh` builds and tests a private software-rendered KWin session.
+`ctest --test-dir build/native --output-on-failure` runs gesture tests after a
+CMake build. `tests/windows.cpp` is a compositor integration probe: run
+`vela-window-test` inside an isolated Vela KWin instance at 1280×800 to check
+actual window sizes through all three modes and restoration to Float.
 
 ## Installing on Bazzite / Fedora Atomic
 
 ```bash
-rpm-ostree install ./rpms/vela-desktop-0.1.0-1.fc45.noarch.rpm
+rpm-ostree install ./rpms/vela-desktop-0.2.0-1.fc45.x86_64.rpm
 ```
 
-Reboot, then pick **Vela** on the login screen. Remove it again with
-`rpm-ostree uninstall vela-desktop`. Installing pulls in KWin and the parts of
-Plasma that Vela uses.
+For an already layered local Vela RPM, use:
+
+```bash
+rpm-ostree install --uninstall vela-desktop ./rpms/vela-desktop-0.2.0-1.fc45.x86_64.rpm
+```
+
+Reboot and select **Vela** at login. Remove with `rpm-ostree uninstall vela-desktop`.
+The shell upgrades the stock 0.1 panel shapes, removing the old pager and making
+room for the layout switch. Other panel configurations are left as configured.
+
+## Source layout
+
+`src/` contains the native KWin plugin and Qt Quick shell. `session/` contains the
+session launcher, autostart entry and panel upgrade. `config/xdg/` and
+`lookandfeel/` provide session defaults. `packaging/` contains the RPM spec;
+`scripts/` contains development tools. `docs/mockup/` is the original HTML reference.

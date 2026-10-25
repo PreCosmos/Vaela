@@ -9,6 +9,7 @@ IMAGE=registry.fedoraproject.org/fedora:45
 HOME_DIR="$PWD/.devbox/home"
 
 BUILD_PKGS=(
+  layer-shell-qt-devel plasma-activities-devel libepoxy-devel libdrm-devel vulkan-loader-devel
   cmake extra-cmake-modules ninja-build gcc-c++ git rpm-build rpmdevtools rpmlint
   kwin-devel libplasma-devel plasma-workspace-devel
   qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtwayland-devel
@@ -31,5 +32,5 @@ if ! distrobox list --no-color | grep -qw "$NAME"; then
   distrobox enter "$NAME" -- true
 fi
 podman start "$NAME" >/dev/null
-podman exec -u root "$NAME" dnf install -y --setopt=install_weak_deps=False \
+podman exec -u 0 "$NAME" dnf install -y --setopt=install_weak_deps=False \
   "${BUILD_PKGS[@]}" "${RUN_PKGS[@]}"

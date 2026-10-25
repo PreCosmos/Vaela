@@ -24,6 +24,7 @@ TEST_HOME="$ROOT/build/nested-home"
 
 cmake -S . -B build/nested -DCMAKE_INSTALL_PREFIX=/usr \
       -DPLASMA_DBUS_HELPER=/usr/libexec/plasma-dbus-run-session-if-needed >/dev/null
+cmake --build build/nested --parallel
 rm -rf "$STAGE"
 DESTDIR="$STAGE" cmake --install build/nested >/dev/null
 
@@ -44,5 +45,20 @@ export VELA_SESSION=1
 plasma-apply-lookandfeel --apply org.vela.desktop >/dev/null 2>&1 || true
 
 W=${SIZE%x*} H=${SIZE#*x}
+# The native KWin plugin must be installed in the dev container first.
+# QT_PLUGIN_PATH makes the staged plugin available without changing the host.
+export QT_PLUGIN_PATH="$STAGE/usr/lib64/qt6/plugins:${QT_PLUGIN_PATH:-/usr/lib64/qt6/plugins}"
+export VELA_QML="$STAGE/usr/share/vela/Main.qml"
+export PATH="$STAGE/usr/bin:$PATH"
+cat > "$ROOT/build/nested-session.sh" <<'SESSION'
+#!/bin/sh
+plasmashell &
+plasma_pid=$!
+vela-shell &
+vela_pid=$!
+trap 'kill "$plasma_pid" "$vela_pid" 2>/dev/null' EXIT INT TERM
+wait "$plasma_pid"
+SESSION
+chmod +x "$ROOT/build/nested-session.sh"
 exec dbus-run-session -- kwin_wayland --width "$W" --height "$H" --xwayland \
-  --exit-with-session plasmashell
+  --exit-with-session "$ROOT/build/nested-session.sh"

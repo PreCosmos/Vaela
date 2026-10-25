@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Vela Shell
+Exec=vela-shell
+OnlyShowIn=KDE;
+X-KDE-autostart-phase=2
+NoDisplay=true

@@ -1,15 +1,26 @@
 Name:           vela-desktop
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        Vela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
 Source0:        %{name}-%{version}.tar.gz
-BuildArch:      noarch
+%global kwin_version %(rpm -q --qf '%%{VERSION}' kwin-devel)
 
 BuildRequires:  cmake
+BuildRequires:  gcc-c++
+BuildRequires:  extra-cmake-modules
+BuildRequires:  kwin-devel
+BuildRequires:  qt6-qtdeclarative-devel
+BuildRequires:  qt6-qtbase-devel
+BuildRequires:  kf6-kglobalaccel-devel
+BuildRequires:  plasma-activities-devel
+BuildRequires:  layer-shell-qt-devel
+BuildRequires:  libepoxy-devel
+BuildRequires:  libdrm-devel
+BuildRequires:  vulkan-loader-devel
 
 # The session itself.
-Requires:       kwin >= 6.7
+Requires:       kwin = %{kwin_version}
 Requires:       plasma-workspace >= 6.7
 Requires:       plasma-desktop
 Requires:       plasma-breeze
@@ -25,6 +36,9 @@ Requires:       plasma-print-manager
 Requires:       powerdevil
 Requires:       kinfocenter
 # The dock's default terminal launcher.
+Requires:       layer-shell-qt
+Requires:       spectacle
+Requires:       qt6-qtdeclarative
 Requires:       konsole
 Recommends:     dolphin
 Recommends:     plasma-nm
@@ -43,6 +57,9 @@ appears as its own "Vela" session on the login screen.
 %cmake -DPLASMA_DBUS_HELPER=%{_libexecdir}/plasma-dbus-run-session-if-needed
 %cmake_build
 
+%check
+ctest --test-dir %{__cmake_builddir} --output-on-failure
+
 %install
 %cmake_install
 
@@ -50,10 +67,16 @@ appears as its own "Vela" session on the login screen.
 %license LICENSES/GPL-2.0-or-later.txt
 %doc README.md
 %{_bindir}/startvela
+%{_bindir}/vela-shell
+%{_libdir}/qt6/plugins/kwin/plugins/libvela.so
 %{_datadir}/wayland-sessions/vela.desktop
 %{_datadir}/vela/
 %{_datadir}/plasma/look-and-feel/org.vela.desktop/
 
 %changelog
+* Sun Oct 25 2026 Vela contributors - 0.2.0-1
+- Add native KWin gestures and per-activity layouts, radial menu, workspace tabs,
+  Quick Commands and Vela Settings.
+
 * Sun Oct 25 2026 Vela contributors - 0.1.0-1
 - First package: Vela session, default panel layout and look-and-feel defaults.
