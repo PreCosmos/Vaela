@@ -81,25 +81,34 @@ QtObject {
     }
     property Window tabs: Window {
         id: tabsWindow
-        width: tabsHover.hovered || tabsContent.activeFocus ? 220 : 6
-        height: Math.min(Screen.height-100,Math.max(120,((vela.state.desktops || []).length+1)*78))
+        property bool expanded:false
+        property int openMenus:0
+        width: expanded || openMenus>0 || rename.visible ? 220 : 6
+        height: Math.min(Screen.height-100,Math.max(120,(vela.state.desktops || []).length*76+54))
         color: root.background; visible: !!vela.state.mode
         flags: Qt.FramelessWindowHint
         Component.onCompleted: vela.layer(tabsWindow,"tabs")
-        HoverHandler { id: tabsHover }
-        ColumnLayout {
-            id: tabsContent
-            anchors.fill: parent; anchors.margins: 6; visible: tabsWindow.width>6
+        HoverHandler {
+            id:tabsHover
+            onHoveredChanged:if(hovered) {collapse.stop();tabsWindow.expanded=true} else collapse.restart()
+        }
+        Timer {id:collapse;interval:250;onTriggered:if(!tabsHover.hovered && !tabsWindow.openMenus && !rename.visible) tabsWindow.expanded=false}
+        ScrollView {
+            anchors.fill:parent;anchors.margins:6;visible:tabsWindow.width>6
+            contentWidth:availableWidth
+        Column {
+            id:tabsContent
+            width:parent.width;spacing:6
             Repeater {
                 model: vela.state.desktops || []
                 delegate: Rectangle {
                     required property var modelData
-                    Layout.fillWidth: true; implicitHeight: 70; radius: 8
+                    width:tabsContent.width;height:70;radius:8
                     color: modelData.current ? "#74513f" : "#343640"
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 5
                         Button {
-                            text:modelData.id+"  "+modelData.name+"\n"+modelData.windows.length+" windows"
+                            text:modelData.id+"  "+modelData.name+"\n"+modelData.mode+" · "+modelData.windows.length+" windows"
                             Layout.fillWidth:true
                             onClicked:vela.call("desktop",[modelData.id])
                             ToolTip.text: modelData.windows.join("\n") || "Empty workspace"
@@ -107,13 +116,16 @@ QtObject {
                         }
                         ToolButton {text:"⋮"; onClicked: workspaceMenu.popup(); Menu {
                             id: workspaceMenu
-                            MenuItem {text:"Rename…"; onTriggered:{rename.workspaceId=modelData.id;renameName.text=modelData.name;rename.open()}}
+                            onOpened:++tabsWindow.openMenus
+                            onClosed:{--tabsWindow.openMenus;collapse.restart()}
+                            MenuItem {text:"Rename…"; onTriggered:{rename.workspaceId=modelData.id;renameName.text=modelData.name;rename.open();tabsWindow.requestActivate();renameName.forceActiveFocus()}}
                             MenuItem {text:"Remove workspace"; enabled:(vela.state.desktops || []).length>1; onTriggered:vela.call("removeDesktop",[modelData.id])}
                         }}
                     }
                 }
             }
-            Button {text:"+ Workspace"; Layout.fillWidth:true; onClicked:vela.call("addDesktop")}
+            Button {text:"+ Workspace";width:tabsContent.width;height:36;onClicked:vela.call("addDesktop")}
+        }
         }
         Dialog {
             id:rename; property int workspaceId:0; title:"Rename workspace"; modal:true
@@ -168,7 +180,7 @@ QtObject {
                     ColumnLayout {
                         width:parent.width; spacing:12
                         Button {text:"Customize Radial Menu…";onClicked:root.open("radial-settings",0,0)}
-                        Label {text:"Window layout · current activity"; color:root.accent}
+                        Label {text:"Window layout · current workspace"; color:root.accent}
                         ComboBox {model:root.modes; currentIndex:root.modes.indexOf(vela.state.mode); onActivated:vela.call("setMode",[currentText])}
                         Label {text:"Window spacing: "+vela.gap+" px"; color:"white"}
                         SpinBox {from:0; to:40; value:vela.gap; onValueModified:vela.setting("Gap",value)}

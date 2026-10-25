@@ -16,6 +16,7 @@ inline QVector<double> resize(QVector<double> tracks,int index,double requested,
     double total=std::accumulate(tracks.begin(),tracks.end(),0.);
     minimum=std::min(minimum,total/tracks.size());
     requested=std::clamp(requested,minimum,total-minimum*(tracks.size()-1));
+    if(std::abs(requested-tracks[index])<0.5) return tracks;
     double remaining=total-requested, others=total-tracks[index];
     // Distribute a minimum first, then share the surplus by the old sizes.
     for(int i=0;i<tracks.size();++i) if(i!=index) tracks[i]=minimum+(remaining-minimum*(tracks.size()-1))*tracks[i]/others;

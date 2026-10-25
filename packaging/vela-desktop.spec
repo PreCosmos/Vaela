@@ -1,5 +1,5 @@
 Name:           vela-desktop
-Version:        0.3.0
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        Vela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -76,6 +76,10 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %{_datadir}/plasma/look-and-feel/org.vela.desktop/
 
 %changelog
+* Sun Oct 25 2026 Vela contributors - 0.4.0-1
+- Fix workspace button D-Bus types and edge-bar interaction.
+- Save layouts per workspace and reflow neighbours during interactive resize.
+
 * Sun Oct 25 2026 Vela contributors - 0.3.0-1
 - Add a persistent radial menu editor, application picker, commands and item images.
 - Register native input filtering, add staged context/radial hold timing and down-to-close.

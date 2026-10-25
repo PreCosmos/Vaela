@@ -24,7 +24,7 @@ qdbus-qt6 org.vela.Controller /Controller org.vela.Controller.setMode Scrollable
 qdbus-qt6 org.vela.Controller /Controller org.vela.Controller.addDesktop
 qdbus-qt6 org.vela.Controller /Controller org.vela.Controller.renameDesktop 2 Testing
 qdbus-qt6 org.vela.Controller /Controller org.vela.Controller.desktop 2
-qdbus-qt6 org.vela.Controller /Controller org.vela.Controller.state | python3 -c 'import sys,json;s=json.load(sys.stdin);assert s["mode"]=="Scrollable";assert s["desktops"][1]["name"]=="Testing" and s["desktops"][1]["current"];assert all(not d["windows"] for d in s["desktops"]),s'
+qdbus-qt6 org.vela.Controller /Controller org.vela.Controller.state | python3 -c 'import sys,json;s=json.load(sys.stdin);assert s["mode"]=="Float";assert s["desktops"][1]["name"]=="Testing" and s["desktops"][1]["current"];assert all(not d["windows"] for d in s["desktops"]),s'
 qdbus-qt6 org.vela.Controller /Controller org.vela.Controller.removeDesktop 2
 for view in radial commands settings radial-settings; do
     qdbus-qt6 org.vela.Shell /Shell org.vela.Shell.showView "$view" 600 400

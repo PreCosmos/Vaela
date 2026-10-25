@@ -6,13 +6,14 @@ on the login screen. Vela uses Plasma's services and system settings pages.
 ## Desktop controls
 
 - The top-right switch selects **Float**, **Auto Tiling** (a grid), or
-  **Scrollable** (horizontal, full-height columns). The choice is saved per activity.
+  **Scrollable** (horizontal, full-height columns). The choice is saved independently per workspace in each activity.
   Drag a window edge to resize: Scrollable keeps an independent column width;
   Auto Tiling shares the new column/row boundary with neighbouring windows.
-  Sizes are retained while the session and window remain open.
+  Neighbouring tiles reflow during the drag. Scrollable neighbours keep their widths
+  and move to preserve gaps. Sizes are retained while the session and window remain open.
   Float restores window geometry saved before automatic arrangement. Layouts exclude
   dialogs, panels, pinned windows, minimized windows and fullscreen applications.
-- The right-edge workspace bar reveals vertical tabs on hover. Click to switch;
+- The right-edge workspace bar reveals vertical tabs on hover, with each workspace’s layout. Click to switch;
   use **+ Workspace** to add and **⋮** to rename or remove. Hover for window titles.
 - **F2** opens Quick Commands. Type to filter, use arrows and Enter to execute.
 - Hold right-click still: the context menu appears at **0.25 seconds**, hides at
@@ -84,13 +85,13 @@ actual window sizes through all three modes and restoration to Float.
 ## Installing on Bazzite / Fedora Atomic
 
 ```bash
-rpm-ostree install ./rpms/vela-desktop-0.3.0-1.fc45.x86_64.rpm
+rpm-ostree install ./rpms/vela-desktop-0.4.0-1.fc45.x86_64.rpm
 ```
 
 For an already layered local Vela RPM, use:
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./rpms/vela-desktop-0.3.0-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./rpms/vela-desktop-0.4.0-1.fc45.x86_64.rpm
 ```
 
 Reboot and select **Vela** at login. Remove with `rpm-ostree uninstall vela-desktop`.

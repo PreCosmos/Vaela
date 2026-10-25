@@ -67,7 +67,11 @@ class Vela : public Plugin, public InputEventFilter {
         rows[key]=Layout::resize(heights,index/nc,requested.height(),100);
     }
     QString activity() const { auto a=workspace()->activities(); return a && !a->current().isEmpty() ? a->current() : QStringLiteral("default"); }
-    QString mode() const { return KConfigGroup(config, "Layouts").readEntry(activity(), QStringLiteral("Float")); }
+    QString mode(VirtualDesktop *desktop = nullptr) const {
+        if(!desktop) desktop=VirtualDesktopManager::self()->currentDesktop();
+        KConfigGroup group(config,"Layouts");
+        return group.readEntry(activity()+":"+desktop->id(),group.readEntry(activity(),QStringLiteral("Float")));
+    }
     bool locked() const { return waylandServer() && waylandServer()->isScreenLocked(); }
     void ui(QString view, QPointF pos = {}) {
         auto m=QDBusMessage::createMethodCall("org.vela.Shell", "/Shell", "org.vela.Shell", "showView");
@@ -112,14 +116,17 @@ class Vela : public Plugin, public InputEventFilter {
         connect(w,&Window::desktopsChanged,this,[this]{schedule();});
         connect(w,&Window::fullScreenChanged,this,[this]{schedule();});
         connect(w,&Window::interactiveMoveResizeStarted,this,[this,w]{if(w->isInteractiveResize()) resizing.insert(w);});
+        connect(w,&Window::interactiveMoveResizeStepped,this,[this,w](const RectF &geometry){
+            if(!arranging && resizing.contains(w)) {rememberResize(w,geometry.size());schedule();}
+        });
         connect(w,&Window::interactiveMoveResizeFinished,this,[this,w]{if(resizing.remove(w)) rememberResize(w,w->moveResizeGeometry().size());schedule();});
         schedule();
     }
     void arrange() {
-        if (locked() || !resizing.isEmpty()) return;
+        if (locked()) return;
         if (mode()=="Float") {
             for(auto it=floating.begin();it!=floating.end();) {
-                if(it.key()->isOnCurrentActivity()) {it.key()->moveResize(it.value());it=floating.erase(it);} else ++it;
+                if(it.key()->isOnCurrentActivity() && it.key()->isOnCurrentDesktop()) {it.key()->moveResize(it.value());it=floating.erase(it);} else ++it;
             }
             return;
         }
@@ -144,9 +151,11 @@ class Vela : public Plugin, public InputEventFilter {
             double y=gap;
             for(int i=0;i<rows;++i) {ys[i]=y;y+=heights[i]+gap;}
             int focus=std::max(0,int(list.indexOf(lastWindow)));
-            const double offset=scroll ? std::clamp(xs[focus]-(area.width()-widths[focus])/2,0.,std::max(0.,total-area.width())) : 0;
+            double offset=scroll ? std::clamp(xs[focus]-(area.width()-widths[focus])/2,0.,std::max(0.,total-area.width())) : 0;
+            if(scroll) for(int i=0;i<list.size();++i) if(resizing.contains(list[i])) offset=area.x()+xs[i]-list[i]->moveResizeGeometry().x();
             for(int i=0;i<list.size();++i) {
                 auto w=list[i]; if(!floating.contains(w)) floating[w]=w->frameGeometry();
+                if(resizing.contains(w)) continue;
                 if(w->maximizeMode()!=MaximizeRestore) w->setMaximize(false,false);
                 w->moveResize(RectF(area.x()+xs[i%cols]-offset,area.y()+ys[i/cols],widths[i%cols],heights[i/cols]));
             }
@@ -243,13 +252,13 @@ public Q_SLOTS:
         for(auto d:VirtualDesktopManager::self()->desktops()) {
             QJsonArray windows;
             for(auto w:windowOrder) if(appWindow(w) && w->isOnDesktop(d) && w->isOnCurrentActivity()) windows.append(w->caption());
-            desks.append(QJsonObject{{"id",int(d->x11DesktopNumber())},{"name",d->name()},{"current",d==VirtualDesktopManager::self()->currentDesktop()},{"windows",windows}});
+            desks.append(QJsonObject{{"id",int(d->x11DesktopNumber())},{"name",d->name()},{"mode",mode(d)},{"current",d==VirtualDesktopManager::self()->currentDesktop()},{"windows",windows}});
         }
         return QString::fromUtf8(QJsonDocument(QJsonObject{{"version",QStringLiteral(VELA_VERSION)},{"mode",mode()},{"desktops",desks},{"activity",activity()}}).toJson(QJsonDocument::Compact));
     }
     void setMode(const QString &value) {
         if(locked() || !QStringList{"Float","Auto Tiling","Scrollable"}.contains(value)) return;
-        KConfigGroup(config,"Layouts").writeEntry(activity(),value);config->sync();
+        KConfigGroup(config,"Layouts").writeEntry(activity()+":"+VirtualDesktopManager::self()->currentDesktop()->id(),value);config->sync();
         schedule();
     }
     void desktop(int id) {if(!locked()) VirtualDesktopManager::self()->setCurrent(id);}

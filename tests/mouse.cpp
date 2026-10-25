@@ -46,6 +46,23 @@ private Q_SLOTS:
         motion(1100,600);button(true);motion(1170,600);button(false);QTRY_COMPARE(desktop(),2);
         motion(1100,600);button(true);motion(1030,600);button(false);QTRY_COMPARE(desktop(),1);
     }
+    void workspaceButtonsThroughPointerEvents() {
+        QVERIFY(probe.call("workspaceBar",false,0).arguments().first().toBool());QTest::qWait(500);
+        QVERIFY(probe.call("workspaceBar",true,2).arguments().first().toBool());QTRY_COMPARE(desktop(),2);
+        QTest::qWait(400);
+        QVERIFY(probe.call("workspaceBar",true,1).arguments().first().toBool());QTRY_COMPARE(desktop(),1);
+    }
+    void perWorkspaceModes() {
+        controller.call("desktop",1);controller.call("setMode","Auto Tiling");
+        controller.call("desktop",2);controller.call("setMode","Scrollable");
+        controller.call("desktop",1);
+        auto s=QJsonDocument::fromJson(controller.call("state").arguments().first().toString().toUtf8()).object();
+        QCOMPARE(s["mode"].toString(),QString("Auto Tiling"));
+        controller.call("desktop",2);
+        s=QJsonDocument::fromJson(controller.call("state").arguments().first().toString().toUtf8()).object();
+        QCOMPARE(s["mode"].toString(),QString("Scrollable"));
+        controller.call("setMode","Float");controller.call("desktop",1);controller.call("setMode","Float");QTest::qWait(150);
+    }
     void contextMenuAndRadialTiming() {
         QVERIFY(probe.call("hover","Vela mouse test").arguments().first().toBool());QTest::qWait(100);
         button(true);QTest::qWait(180);QCOMPARE(window.shown,0);

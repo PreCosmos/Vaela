@@ -56,6 +56,8 @@ public:
     }
     Q_INVOKABLE void call(QString method,QVariantList args={}) {
         auto message=QDBusMessage::createMethodCall("org.vela.Controller","/Controller","org.vela.Controller",method);
+        // JavaScript numbers arrive as doubles; these D-Bus methods require an int.
+        if(QStringList{"desktop","renameDesktop","removeDesktop"}.contains(method) && !args.isEmpty()) args[0]=args[0].toInt();
         message.setArguments(args);QDBusConnection::sessionBus().asyncCall(message);
     }
     Q_INVOKABLE void setting(QString key,QVariant value) {
@@ -78,7 +80,8 @@ public:
         auto layer=LayerShellQt::Window::get(window);
         layer->setLayer(LayerShellQt::Window::LayerTop);
         layer->setExclusiveZone(kind=="top"?34:0);
-        layer->setKeyboardInteractivity(kind=="overlay" ? LayerShellQt::Window::KeyboardInteractivityExclusive : LayerShellQt::Window::KeyboardInteractivityNone);
+        if(kind=="tabs") layer->setActivateOnShow(false);
+        layer->setKeyboardInteractivity(kind=="overlay" ? LayerShellQt::Window::KeyboardInteractivityExclusive : kind=="tabs" ? LayerShellQt::Window::KeyboardInteractivityOnDemand : LayerShellQt::Window::KeyboardInteractivityNone);
         if(kind=="top") layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop)|LayerShellQt::Window::AnchorRight);
         else if(kind=="tabs") layer->setAnchors(LayerShellQt::Window::AnchorRight);
         else {
