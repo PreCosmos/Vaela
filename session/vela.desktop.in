@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Vela
+Comment=A Vivaldi-style desktop built on KWin
+Exec=@PLASMA_DBUS_HELPER@ @CMAKE_INSTALL_FULL_BINDIR@/startvela
+TryExec=@CMAKE_INSTALL_FULL_BINDIR@/startvela
+# Plasma, its portals and Qt's platform theme all key off "KDE".
+DesktopNames=KDE

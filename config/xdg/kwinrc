@@ -1,0 +1,7 @@
+# Workspaces start as a vertical list (3 rows, 1 column), matching the right-edge workspace bar.
+[Desktops]
+Number=3
+Rows=3
+Name_1=Main
+Name_2=Work
+Name_3=Play

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Create the Fedora 45 distrobox used to build and test Vela, or bring its packages up to date.
+# Its home lives in .devbox/home inside the repo, so build caches stay on this drive.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+NAME=vela-dev
+IMAGE=registry.fedoraproject.org/fedora:45
+HOME_DIR="$PWD/.devbox/home"
+
+BUILD_PKGS=(
+  cmake extra-cmake-modules ninja-build gcc-c++ git rpm-build rpmdevtools rpmlint
+  kwin-devel libplasma-devel plasma-workspace-devel
+  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtwayland-devel
+  kf6-kcmutils-devel kf6-kconfig-devel kf6-kcoreaddons-devel kf6-ki18n-devel
+  kf6-kglobalaccel-devel kf6-kwindowsystem-devel kf6-kpackage-devel
+)
+# Enough of Plasma to run a Vela session nested in a window.
+RUN_PKGS=(
+  kwin plasma-workspace plasma-desktop plasma-systemsettings kscreen plasma-pa
+  plasma-print-manager powerdevil kinfocenter plasma-breeze breeze-icon-theme
+  xdg-desktop-portal-kde konsole dolphin dbus-daemon mesa-dri-drivers mesa-vulkan-drivers
+)
+
+mkdir -p "$HOME_DIR"
+if ! distrobox list --no-color | grep -qw "$NAME"; then
+  # distrobox enter waits for a "setup done" line in the container log. With the default
+  # journald log driver that line can get dropped, leaving enter waiting forever.
+  distrobox create --yes --name "$NAME" --image "$IMAGE" --home "$HOME_DIR" --no-entry \
+    --additional-flags "--log-driver=k8s-file"
+  distrobox enter "$NAME" -- true
+fi
+podman start "$NAME" >/dev/null
+podman exec -u root "$NAME" dnf install -y --setopt=install_weak_deps=False \
+  "${BUILD_PKGS[@]}" "${RUN_PKGS[@]}"

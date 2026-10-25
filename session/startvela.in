@@ -1,0 +1,9 @@
+#!/bin/sh
+# Start a Vela session: Plasma's Wayland session with Vela's config defaults layered
+# under the user's own ~/.config. startplasma-wayland keeps XDG_CONFIG_DIRS and puts
+# its kdedefaults directory in front of it.
+
+export VELA_SESSION=1
+export XDG_CONFIG_DIRS="@VELA_DATADIR@/xdg:${XDG_CONFIG_DIRS:-/etc/xdg}"
+
+exec /usr/bin/startplasma-wayland "$@"

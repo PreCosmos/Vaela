@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Vela contributors"
+            }
+        ],
+        "Description": "Defaults and first-login layout for the Vela desktop",
+        "Id": "org.vela.desktop",
+        "License": "GPL-2.0-or-later",
+        "Name": "Vela",
+        "Version": "0.1.0"
+    },
+    "X-Plasma-APIVersion": "2"
+}
