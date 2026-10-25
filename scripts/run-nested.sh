@@ -5,7 +5,12 @@
 #   --size WxH  window size (default 1600x900)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-[ -e /run/.containerenv ] || exec distrobox enter vela-dev -- "$PWD/scripts/run-nested.sh" "$@"
+if [ ! -e /run/.containerenv ]; then
+  # Numeric UID also works when distrobox's named-user lookup is unavailable.
+  podman start vela-dev >/dev/null
+  exec podman exec -u "$(id -u)" -e XDG_RUNTIME_DIR -e WAYLAND_DISPLAY -e DISPLAY \
+    -e LANG -e QT_QPA_PLATFORM=wayland vela-dev "$PWD/scripts/run-nested.sh" "$@"
+fi
 
 SIZE=1600x900
 FRESH=0
@@ -22,7 +27,7 @@ ROOT="$PWD"
 STAGE="$ROOT/build/stage"
 TEST_HOME="$ROOT/build/nested-home"
 
-cmake -S . -B build/nested -DCMAKE_INSTALL_PREFIX=/usr \
+cmake -S . -B build/nested -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib64 \
       -DPLASMA_DBUS_HELPER=/usr/libexec/plasma-dbus-run-session-if-needed >/dev/null
 cmake --build build/nested --parallel
 rm -rf "$STAGE"
@@ -47,7 +52,7 @@ plasma-apply-lookandfeel --apply org.vela.desktop >/dev/null 2>&1 || true
 W=${SIZE%x*} H=${SIZE#*x}
 # The native KWin plugin must be installed in the dev container first.
 # QT_PLUGIN_PATH makes the staged plugin available without changing the host.
-export QT_PLUGIN_PATH="$STAGE/usr/lib64/qt6/plugins:${QT_PLUGIN_PATH:-/usr/lib64/qt6/plugins}"
+export QT_PLUGIN_PATH="$STAGE/usr/lib64/qt6/plugins:$STAGE/usr/lib/qt6/plugins:${QT_PLUGIN_PATH:-/usr/lib64/qt6/plugins}"
 export VELA_QML="$STAGE/usr/share/vela/Main.qml"
 export PATH="$STAGE/usr/bin:$PATH"
 cat > "$ROOT/build/nested-session.sh" <<'SESSION'

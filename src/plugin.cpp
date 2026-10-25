@@ -11,6 +11,9 @@
 #include <window.h>
 #include <virtualdesktops.h>
 #include <wayland_server.h>
+#include <wayland/seat.h>
+#include <wayland/display.h>
+#include <linux/input-event-codes.h>
 #include <activities.h>
 #include <KConfigGroup>
 #include <KSharedConfig>
@@ -31,10 +34,10 @@ class Vela : public Plugin, public InputEventFilter {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.vela.Controller")
     KSharedConfig::Ptr config = KSharedConfig::openConfig("velarc");
-    QTimer hold, layoutTimer;
+    QTimer hold, contextShow, contextHide, layoutTimer;
     Gesture gesture;
     QPointer<Window> target, lastWindow;
-    bool down = false, radial = false, replay = false, arranging = false;
+    bool down = false, radial = false, contextShown = false, contextDelivered = false, arranging = false;
     QHash<Window *, RectF> floating;
     QHash<Window *, double> scrollWidths;
     QHash<QString, QVector<double>> columns, rows;
@@ -69,6 +72,26 @@ class Vela : public Plugin, public InputEventFilter {
     void ui(QString view, QPointF pos = {}) {
         auto m=QDBusMessage::createMethodCall("org.vela.Shell", "/Shell", "org.vela.Shell", "showView");
         m << view << int(pos.x()) << int(pos.y()); QDBusConnection::sessionBus().asyncCall(m);
+    }
+    void stopHold() {hold.stop();contextShow.stop();contextHide.stop();}
+    void contextClick() {
+        auto seat=waylandServer()->seat();
+        seat->notifyPointerButton(Qt::RightButton,PointerButtonState::Pressed);seat->notifyPointerFrame();
+        seat->notifyPointerButton(Qt::RightButton,PointerButtonState::Released);seat->notifyPointerFrame();
+        contextShown=true;contextDelivered=true;
+    }
+    void dismissContext() {
+        if(!contextShown) return;
+        bool dismissed=false;
+        const auto windows=workspace()->stackingOrder();
+        for(auto it=windows.crbegin();it!=windows.crend();++it) if((*it)->hasPopupGrab()) {(*it)->popupDone();dismissed=true;}
+        // Some applications draw their context menu inside the parent surface.
+        if(!dismissed) {
+            auto seat=waylandServer()->seat();
+            seat->notifyKeyboardKey(KEY_ESC,KeyboardKeyState::Pressed,waylandServer()->display()->nextSerial());
+            seat->notifyKeyboardKey(KEY_ESC,KeyboardKeyState::Released,waylandServer()->display()->nextSerial());
+        }
+        contextShown=false;
     }
     void shortcut(QString id, QString key, std::function<void()> fn) {
         auto a=new QAction(id,this); a->setObjectName(id); a->setProperty("componentName", "vela");
@@ -133,11 +156,17 @@ class Vela : public Plugin, public InputEventFilter {
 public:
     Vela() : InputEventFilter(InputFilterOrder::TabBox) {
         if(qEnvironmentVariable("VELA_SESSION")!="1") return;
+        input()->installInputEventFilter(this);
         QDBusConnection::sessionBus().registerService("org.vela.Controller");
         QDBusConnection::sessionBus().registerObject("/Controller",this,QDBusConnection::ExportAllSlots);
-        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{hold.stop();down=false;radial=false;target=nullptr;capturedKeys.clear();});
+        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;contextShown=false;target=nullptr;capturedKeys.clear();});
+        hold.setTimerType(Qt::PreciseTimer);contextShow.setTimerType(Qt::PreciseTimer);contextHide.setTimerType(Qt::PreciseTimer);
         hold.setSingleShot(true); hold.setInterval(1000);
-        connect(&hold,&QTimer::timeout,this,[this]{if(down && !gesture.moved && !locked()) {radial=true; ui("radial",gesture.start);}});
+        contextShow.setSingleShot(true);contextShow.setInterval(250);
+        contextHide.setSingleShot(true);contextHide.setInterval(750);
+        connect(&contextShow,&QTimer::timeout,this,[this]{if(down && !gesture.moved && !locked()) contextClick();});
+        connect(&contextHide,&QTimer::timeout,this,[this]{if(down && !locked()) dismissContext();});
+        connect(&hold,&QTimer::timeout,this,[this]{if(down && !gesture.moved && !locked()) {dismissContext();radial=true;ui("radial",gesture.start);}});
         layoutTimer.setSingleShot(true); layoutTimer.setInterval(40);
         connect(&layoutTimer,&QTimer::timeout,this,&Vela::arrange);
         connect(workspace(),&Workspace::windowAdded,this,&Vela::watch);
@@ -167,45 +196,42 @@ public:
         capturedKeys[e->nativeScanCode]=command;action(command);return true;
     }
     bool pointerButton(PointerButtonEvent *e) override {
-        if(replay || qEnvironmentVariable("VELA_SESSION")!="1") return false;
-        if(locked()) {hold.stop(); down=false; radial=false; return false;}
+        if(qEnvironmentVariable("VELA_SESSION")!="1") return false;
+        if(locked()) {stopHold();down=false;radial=false;contextShown=false;return false;}
         if(e->button!=Qt::RightButton) return false;
         if(e->state==PointerButtonState::Pressed) {
             config->reparseConfiguration();
             if(!KConfigGroup(config,"General").readEntry("Gestures",true) || e->modifiers.testFlag(Qt::ShiftModifier)) return false;
-            gesture.begin(e->position); down=true; radial=false; target=nullptr;
+            gesture.begin(e->position);down=true;radial=false;contextShown=false;contextDelivered=false;target=nullptr;
             auto stack=workspace()->stackingOrder();
             for(auto it=stack.crbegin();it!=stack.crend();++it) {
                 auto w=*it;
                 if(w->isOnCurrentDesktop() && w->isOnCurrentActivity() && !w->isMinimized() && w->frameGeometry().contains(e->position)) {
                     // Let shell UI, panels and desktop handle their own context menus.
                     if(!appWindow(w) && !w->isDesktop()) {down=false;return false;}
-                    if(appWindow(w)) target=w;
+                    if(appWindow(w)) {target=w;workspace()->activateWindow(w);}
                     break;
                 }
             }
-            hold.start(); return true;
+            hold.start();contextShow.start();contextHide.start();return true;
         }
         if(!down) return false;
-        down=false; hold.stop();
+        down=false;stopHold();
         if(radial) {radial=false; ui("radial-release",e->position);return true;}
         if(!gesture.directions.isEmpty()) {
-            static const QHash<QString,QString> actions={{"L","previous"},{"R","next"},{"U","maximize"},{"D","minimize"},{"DR","close"},{"UD","cycle-layout"},{"DU","terminal"},{"UL","activities"},{"UR","commands"},{"RU","send-next"},{"LU","send-previous"}};
+            static const QHash<QString,QString> actions={{"L","previous"},{"R","next"},{"U","maximize"},{"D","close"},{"DR","close"},{"UD","cycle-layout"},{"DU","terminal"},{"UL","activities"},{"UR","commands"},{"RU","send-next"},{"LU","send-previous"}};
             action(KConfigGroup(config,"Bindings").readEntry(gesture.directions,actions.value(gesture.directions)));
         } else {
-            // Replay a short click through KWin so ordinary application context menus still work.
-            replay=true;
-            input()->pointer()->processButton(e->nativeButton,PointerButtonState::Pressed,e->timestamp,e->device);
-            input()->pointer()->processButton(e->nativeButton,PointerButtonState::Released,e->timestamp,e->device);
-            replay=false;
+            // Send a balanced click without changing the physical button state in KWin.
+            if(!contextDelivered) contextClick();
         }
         target=nullptr; return true;
     }
     bool pointerMotion(PointerMotionEvent *e) override {
         if(!down) return false;
-        if(locked()) {down=false;hold.stop();return false;}
+        if(locked()) {down=false;stopHold();contextShown=false;return false;}
         gesture.update(e->position,std::clamp(KConfigGroup(config,"General").readEntry("Threshold",28),12,120));
-        if(gesture.moved) hold.stop();
+        if(gesture.moved && !radial) {stopHold();dismissContext();}
         // The radial window needs pointer motion for hover selection.
         return !radial;
     }
@@ -219,7 +245,7 @@ public Q_SLOTS:
             for(auto w:windowOrder) if(appWindow(w) && w->isOnDesktop(d) && w->isOnCurrentActivity()) windows.append(w->caption());
             desks.append(QJsonObject{{"id",int(d->x11DesktopNumber())},{"name",d->name()},{"current",d==VirtualDesktopManager::self()->currentDesktop()},{"windows",windows}});
         }
-        return QString::fromUtf8(QJsonDocument(QJsonObject{{"mode",mode()},{"desktops",desks},{"activity",activity()}}).toJson(QJsonDocument::Compact));
+        return QString::fromUtf8(QJsonDocument(QJsonObject{{"version",QStringLiteral(VELA_VERSION)},{"mode",mode()},{"desktops",desks},{"activity",activity()}}).toJson(QJsonDocument::Compact));
     }
     void setMode(const QString &value) {
         if(locked() || !QStringList{"Float","Auto Tiling","Scrollable"}.contains(value)) return;

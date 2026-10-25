@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include "radialmenu.h"
+#include "icons.h"
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QDBusConnection>
+#include <QDBusAbstractAdaptor>
 #include <QDBusInterface>
 #include <QDBusConnectionInterface>
 #include <algorithm>
@@ -39,7 +42,7 @@ public:
     int threshold() const {return KConfigGroup(config,"General").readEntry("Threshold",28);}
     int gap() const {return KConfigGroup(config,"General").readEntry("Gap",8);}
     QVariantMap bindings() const {
-        QVariantMap result{{"L","previous"},{"R","next"},{"U","maximize"},{"D","minimize"},{"DR","close"},{"UD","cycle-layout"},{"DU","terminal"},{"UL","activities"},{"UR","commands"},{"RU","send-next"},{"LU","send-previous"}};
+        QVariantMap result{{"L","previous"},{"R","next"},{"U","maximize"},{"D","close"},{"DR","close"},{"UD","cycle-layout"},{"DU","terminal"},{"UL","activities"},{"UR","commands"},{"RU","send-next"},{"LU","send-previous"}};
         KConfigGroup group(config,"Bindings");
         for(auto it=result.begin();it!=result.end();++it) it.value()=group.readEntry(it.key(),it.value().toString());
         return result;
@@ -49,7 +52,6 @@ public:
         KConfigGroup(config,"Bindings").writeEntry(stroke,command);config->sync();call("reload");emit changed();
     }
     Bridge() {
-        auto bus=QDBusConnection::sessionBus();bus.registerService("org.vela.Shell");bus.registerObject("/Shell",this,QDBusConnection::ExportAllSlots);
         auto timer=new QTimer(this); connect(timer,&QTimer::timeout,this,&Bridge::refresh);timer->start(350);refresh();
     }
     Q_INVOKABLE void call(QString method,QVariantList args={}) {
@@ -106,7 +108,7 @@ public Q_SLOTS:
             if(next!=data){data=next;emit changed();}
             if(!migrationAttempted && !data.isEmpty()) {
                 migrationAttempted=true;
-                QFile script(QStringLiteral(VELA_QML_PATH).replace("Main.qml","migrate-layout.js"));
+                QFile script((qEnvironmentVariableIsSet("VELA_QML")?qEnvironmentVariable("VELA_QML"):QStringLiteral(VELA_QML_PATH)).replace("Main.qml","migrate-layout.js"));
                 if(script.open(QIODevice::ReadOnly)) {
                     auto message=QDBusMessage::createMethodCall("org.kde.plasmashell","/PlasmaShell","org.kde.PlasmaShell","evaluateScript");
                     message << QString::fromUtf8(script.readAll());
@@ -120,11 +122,28 @@ Q_SIGNALS:
     void changed();
     void requested(QString view,int x,int y);
 };
+class ShellAdaptor : public QDBusAbstractAdaptor {
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.vela.Shell")
+    Bridge *bridge;
+public:
+    explicit ShellAdaptor(Bridge *bridge) : QDBusAbstractAdaptor(bridge),bridge(bridge) {}
+public Q_SLOTS:
+    void showView(const QString &view,int x,int y) {bridge->showView(view,x,y);}
+};
 int main(int argc,char**argv) {
     QGuiApplication app(argc,argv);if(qEnvironmentVariable("VELA_SESSION")!="1") return 0;
     app.setApplicationName("vela-shell"); app.setQuitOnLastWindowClosed(false);
     if(QDBusConnection::sessionBus().interface()->isServiceRegistered("org.vela.Shell")) return 0;
-    Bridge bridge;QQmlApplicationEngine engine;engine.rootContext()->setContextProperty("vela",&bridge);
+    Bridge bridge;
+    new ShellAdaptor(&bridge);
+    if(!QDBusConnection::sessionBus().registerService("org.vela.Shell")) return 0;
+    QDBusConnection::sessionBus().registerObject("/Shell",&bridge,QDBusConnection::ExportAdaptors);
+    RadialMenu radial(KSharedConfig::openConfig("velarc"));
+    QQmlApplicationEngine engine;
+    engine.addImageProvider("menuicons",new MenuIcons);
+    engine.rootContext()->setContextProperty("vela",&bridge);
+    engine.rootContext()->setContextProperty("radial",&radial);
     engine.load(QUrl::fromLocalFile(qEnvironmentVariableIsSet("VELA_QML")?qEnvironmentVariable("VELA_QML"):QStringLiteral(VELA_QML_PATH)));
     if(engine.rootObjects().isEmpty()) return 1;
     return app.exec();

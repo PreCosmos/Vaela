@@ -1,5 +1,5 @@
 Name:           vela-desktop
-Version:        0.2.0
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        Vela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -13,6 +13,8 @@ BuildRequires:  kwin-devel
 BuildRequires:  qt6-qtdeclarative-devel
 BuildRequires:  qt6-qtbase-devel
 BuildRequires:  kf6-kglobalaccel-devel
+BuildRequires:  kf6-kservice-devel
+BuildRequires:  kf6-kio-devel
 BuildRequires:  plasma-activities-devel
 BuildRequires:  layer-shell-qt-devel
 BuildRequires:  libepoxy-devel
@@ -74,6 +76,11 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %{_datadir}/plasma/look-and-feel/org.vela.desktop/
 
 %changelog
+* Sun Oct 25 2026 Vela contributors - 0.3.0-1
+- Add a persistent radial menu editor, application picker, commands and item images.
+- Register native input filtering, add staged context/radial hold timing and down-to-close.
+- Fix preview plugin discovery and reserve room for the Float layout switch.
+
 * Sun Oct 25 2026 Vela contributors - 0.2.0-1
 - Add native KWin gestures and per-activity layouts, radial menu, workspace tabs,
   Quick Commands and Vela Settings.

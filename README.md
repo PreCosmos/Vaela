@@ -15,7 +15,8 @@ on the login screen. Vela uses Plasma's services and system settings pages.
 - The right-edge workspace bar reveals vertical tabs on hover. Click to switch;
   use **+ Workspace** to add and **⋮** to rename or remove. Hover for window titles.
 - **F2** opens Quick Commands. Type to filter, use arrows and Enter to execute.
-- Hold right-click still for **1 second** for the radial menu. Move toward an
+- Hold right-click still: the context menu appears at **0.25 seconds**, hides at
+  **0.75 seconds**, and the radial menu appears at **1 second**. Move toward an
   action and release, or click an action after releasing in the centre. Escape cancels.
 - Right-drag draws gestures. Short clicks retain application context menus;
   **Shift + right-click** bypasses gesture interception.
@@ -25,7 +26,7 @@ on the login screen. Vela uses Plasma's services and system settings pages.
 | Gesture | Default action |
 |---|---|
 | Left / Right | Previous / next workspace |
-| Up / Down | Maximize or restore / minimize |
+| Up / Down | Maximize or restore / close the hovered window |
 | Down, Right | Close the window under the initial press |
 | Up, Down | Cycle layout |
 | Down, Up | Terminal |
@@ -42,6 +43,24 @@ It takes priority over Plasma workspace switching only in Scrollable mode.
 shrinks/grows tiled rows. Scrollable columns always use the available height.
 Bindings and settings live in `~/.config/velarc`. The workspace bar currently
 uses title previews; workspace stacks and live thumbnails remain future work.
+
+## Customizing the radial menu
+
+Open **Vela Settings → Customize Radial Menu…**, or click the gear at the bottom
+of the radial menu. Choose **Add Application** to search installed applications;
+the application name and icon are filled in automatically. Choose **Add Command**
+to enter a name and shell command, with an optional **Run in a terminal** setting.
+
+Every item has an image. Use **Edit** to choose a system icon or **Choose Image…**
+for a local PNG, JPEG, SVG, WebP or BMP. Vela copies imported images into
+`~/.local/share/vela-shell/radial-icons/`, so deleting the original image does not
+break your menu. **Remove** deletes an application, command or desktop action
+from the menu without uninstalling anything. The arrow buttons change the order.
+Changes save immediately in the `[RadialMenu]` group of `~/.config/velarc`.
+Menus with more than eight entries have additional pages; an empty menu keeps
+its gear button so you can add entries again.
+
+The editor takes inspiration from [Kando](https://kando.menu/creating-menus/).
 
 ## Developing
 
@@ -65,13 +84,13 @@ actual window sizes through all three modes and restoration to Float.
 ## Installing on Bazzite / Fedora Atomic
 
 ```bash
-rpm-ostree install ./rpms/vela-desktop-0.2.0-1.fc45.x86_64.rpm
+rpm-ostree install ./rpms/vela-desktop-0.3.0-1.fc45.x86_64.rpm
 ```
 
 For an already layered local Vela RPM, use:
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./rpms/vela-desktop-0.2.0-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./rpms/vela-desktop-0.3.0-1.fc45.x86_64.rpm
 ```
 
 Reboot and select **Vela** at login. Remove with `rpm-ostree uninstall vela-desktop`.

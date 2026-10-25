@@ -9,7 +9,7 @@ IMAGE=registry.fedoraproject.org/fedora:45
 HOME_DIR="$PWD/.devbox/home"
 
 BUILD_PKGS=(
-  layer-shell-qt-devel plasma-activities-devel libepoxy-devel libdrm-devel vulkan-loader-devel
+  kf6-kservice-devel kf6-kio-devel layer-shell-qt-devel plasma-activities-devel libepoxy-devel libdrm-devel vulkan-loader-devel
   cmake extra-cmake-modules ninja-build gcc-c++ git rpm-build rpmdevtools rpmlint
   kwin-devel libplasma-devel plasma-workspace-devel
   qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtwayland-devel

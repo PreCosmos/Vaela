@@ -29,30 +29,37 @@ QtObject {
         else if (action === "system") vela.launch("system")
         else vela.call("action",[action])
     }
+    function runRadial(entry) {
+        if(entry.type === "builtin") run(entry.target)
+        else {overlay.hide();radial.launch(entry.id)}
+    }
     function open(view,x,y) {
+        if(view === "dismiss") {overlay.hide();return}
         if(view === "radial-release") {
-            if(overlay.visible && overlay.view === "radial" && overlay.hot >= 0) run(radialItems[overlay.hot].action)
+            if(overlay.visible && overlay.view === "radial" && overlay.hot >= 0) runRadial(radialItems[overlay.hot])
             return
         }
-        overlay.hide(); overlay.view=view; overlay.hot=-1; search.text=""
+        overlay.hide(); overlay.view=view; overlay.hot=-1; overlay.radialPage=0; search.text=""
+        if(view === "radial-settings") radialEditor.page="menu"
         overlay.width=view === "radial" ? 440 : 620
         overlay.height=view === "radial" ? 440 : 580
         vela.layer(overlay,"overlay",x || Screen.width/2,y || Screen.height/2)
         overlay.show(); overlay.requestActivate()
         if(view === "commands") search.forceActiveFocus()
     }
-    property var radialItems: [
-        {label:"Terminal",action:"terminal"},{label:"Web",action:"browser"},
-        {label:"Files",action:"files"},{label:"Layout",action:"cycle-layout"},
-        {label:"Settings",action:"settings"},{label:"Activities",action:"activities"},
-        {label:"Screenshot",action:"screenshot"},{label:"Commands",action:"commands"}]
+    property var radialItems: radial.entries.slice(overlay.radialPage*8,overlay.radialPage*8+8)
+    property Connections radialEvents: Connections {
+        target:radial
+        function onEntriesChanged() {overlay.hot=-1;overlay.radialPage=Math.min(overlay.radialPage,Math.max(0,Math.ceil(radial.entries.length/8)-1))}
+        function onLaunchFailed() {root.open("radial-settings",0,0)}
+    }
     property Connections bridge: Connections {
         target: vela
         function onRequested(view,x,y) {root.open(view,x,y)}
         function onChanged() { if(!vela.state.mode) overlay.hide() }
     }
     property Window top: Window {
-        width: 380; height: 34; color: root.background
+        width: 460; height: 34; color: root.background
         visible: !!vela.state.mode
         flags: Qt.FramelessWindowHint
         Component.onCompleted: vela.layer(top,"top")
@@ -62,6 +69,7 @@ QtObject {
                 model: root.modes
                 Button {
                     required property string modelData
+                    Layout.minimumWidth:60
                     text: modelData; highlighted: vela.state.mode === modelData
                     onClicked: vela.call("setMode",[modelData])
                     Layout.fillWidth: true
@@ -118,8 +126,9 @@ QtObject {
         id: overlay
         property string view: "commands"
         property int hot: -1
+        property int radialPage: 0
         color: root.background; flags:Qt.FramelessWindowHint
-        title: view === "settings" ? "Vela Settings" : view === "radial" ? "Vela Radial Menu" : "Quick Commands"
+        title: view === "radial-settings" ? "Radial Menu Settings" : view === "settings" ? "Vela Settings" : view === "radial" ? "Vela Radial Menu" : "Quick Commands"
         onActiveChanged: if(!active) hide()
         Item {
             anchors.fill:parent; focus:true
@@ -149,11 +158,16 @@ QtObject {
                     }
                     ScrollBar.vertical:ScrollBar {}
                 }
+                RadialEditor {
+                    id:radialEditor
+                    visible:overlay.view === "radial-settings";Layout.fillWidth:true;Layout.fillHeight:true
+                }
                 ScrollView {
                     visible:overlay.view === "settings"; Layout.fillHeight:true; Layout.fillWidth:true
                     contentWidth:availableWidth
                     ColumnLayout {
                         width:parent.width; spacing:12
+                        Button {text:"Customize Radial Menu…";onClicked:root.open("radial-settings",0,0)}
                         Label {text:"Window layout · current activity"; color:root.accent}
                         ComboBox {model:root.modes; currentIndex:root.modes.indexOf(vela.state.mode); onActivated:vela.call("setMode",[currentText])}
                         Label {text:"Window spacing: "+vela.gap+" px"; color:"white"}
@@ -161,10 +175,10 @@ QtObject {
                         Switch {text:"Right-button gestures and hold menu"; checked:vela.gestures; onToggled:vela.setting("Gestures",checked)}
                         Label {text:"Gesture stroke threshold: "+vela.threshold+" px"; color:"white"}
                         SpinBox {from:12; to:120; value:vela.threshold; onValueModified:vela.setting("Threshold",value)}
-                        Label {text:"Hold right-click for 1 second to open the radial menu.\nShift + right-click bypasses gestures. Escape closes menus."; wrapMode:Text.WordWrap; Layout.fillWidth:true; color:"#dddddd"}
+                        Label {text:"Hold right-click: context menu at 0.25 s, hidden at 0.75 s, radial menu at 1 s.\nShift + right-click bypasses gestures. Escape closes menus."; wrapMode:Text.WordWrap; Layout.fillWidth:true; color:"#dddddd"}
                         Label {text:"Mouse gestures"; color:root.accent}
                         Label {
-                            text:"← / →   Previous / next workspace\n↑   Maximize / restore     ↓   Minimize\n↓ →   Close window     ↑ ↓   Cycle layout\n↓ ↑   Terminal     ↑ ←   Activities\n↑ →   Quick Commands\n→ ↑ / ← ↑   Move window to next / previous workspace"
+                            text:"← / →   Previous / next workspace\n↑   Maximize / restore     ↓   Close window\n↓ →   Close window     ↑ ↓   Cycle layout\n↓ ↑   Terminal     ↑ ←   Activities\n↑ →   Quick Commands\n→ ↑ / ← ↑   Move window to next / previous workspace"
                             color:"white"; wrapMode:Text.WordWrap; Layout.fillWidth:true
                         }
                         Repeater {
@@ -188,27 +202,45 @@ QtObject {
             }
             Item {
                 anchors.fill:parent; visible:overlay.view === "radial"
-                Label {anchors.centerIn:parent; text:"Vela\n"+vela.state.mode; horizontalAlignment:Text.AlignHCenter; font.pixelSize:20; color:"white"}
+                Column {
+                    anchors.centerIn:parent;spacing:8;width:140
+                    Label {width:parent.width;text:overlay.hot>=0 && root.radialItems[overlay.hot]?root.radialItems[overlay.hot].label:"Vela";horizontalAlignment:Text.AlignHCenter;wrapMode:Text.WordWrap;font.pixelSize:20;color:"white"}
+                    Label {width:parent.width;text:radial.entries.length?(vela.state.mode || "Vela"):"Add your first item";horizontalAlignment:Text.AlignHCenter;color:"#c9c9d2"}
+                }
                 HoverHandler {
                     onPointChanged: {
-                        let dx=point.position.x-220, dy=point.position.y-220
-                        overlay.hot=Math.hypot(dx,dy)<65 ? -1 : Math.round((Math.atan2(dx,-dy)+2*Math.PI)/(Math.PI/4))%8
+                        let dx=point.position.x-220, dy=point.position.y-220, count=root.radialItems.length
+                        overlay.hot=Math.hypot(dx,dy)<70 || Math.hypot(dx,dy)>190 || !count ? -1 : Math.round((Math.atan2(dx,-dy)+2*Math.PI)/(2*Math.PI/count))%count
                     }
                 }
                 Repeater {
                     model:root.radialItems
-                    Button {
+                    Item {
                         required property var modelData
                         required property int index
-                        x:220+150*Math.sin(index*Math.PI/4)-width/2
-                        y:220-150*Math.cos(index*Math.PI/4)-height/2
-                        width:105; height:52; text:modelData.label
-                        highlighted:overlay.hot === index
-                        onHoveredChanged:if(hovered) overlay.hot=index
-                        onClicked:root.run(modelData.action)
+                        x:220+145*Math.sin(index*2*Math.PI/Math.max(1,root.radialItems.length))-width/2
+                        y:220-145*Math.cos(index*2*Math.PI/Math.max(1,root.radialItems.length))-32
+                        width:110;height:100
+                        Button {
+                            id:radialButton
+                            anchors.horizontalCenter:parent.horizontalCenter;width:64;height:64
+                            Accessible.name:modelData.label
+                            background:Rectangle {radius:32;color:overlay.hot===index?root.accent:"#3a3d4b";border.color:overlay.hot===index?"#f7c6a6":"#55596a";border.width:2}
+                            contentItem:Image {source:"image://menuicons/"+encodeURIComponent(modelData.icon);sourceSize.width:36;sourceSize.height:36;fillMode:Image.PreserveAspectFit;anchors.centerIn:parent;anchors.margins:14}
+                            onHoveredChanged:if(hovered) overlay.hot=index
+                            onClicked:root.runRadial(modelData)
+                        }
+                        Label {anchors.top:radialButton.bottom;anchors.topMargin:4;width:parent.width;text:modelData.label;horizontalAlignment:Text.AlignHCenter;elide:Text.ElideRight;color:"white";font.pixelSize:12}
                     }
                 }
-                ToolButton {anchors.right:parent.right; text:"×"; onClicked:overlay.hide()}
+                Row {
+                    anchors.bottom:parent.bottom;anchors.bottomMargin:8;anchors.horizontalCenter:parent.horizontalCenter;spacing:8
+                    ToolButton {text:"‹";visible:radial.entries.length>8;enabled:overlay.radialPage>0;onClicked:{overlay.hot=-1;--overlay.radialPage}}
+                    Label {text:(overlay.radialPage+1)+" / "+Math.ceil(radial.entries.length/8);visible:radial.entries.length>8;color:"white";anchors.verticalCenter:parent.verticalCenter}
+                    ToolButton {text:"›";visible:radial.entries.length>8;enabled:(overlay.radialPage+1)*8<radial.entries.length;onClicked:{overlay.hot=-1;++overlay.radialPage}}
+                    ToolButton {text:"⚙";Accessible.name:"Customize radial menu";onClicked:root.open("radial-settings",0,0)}
+                }
+                ToolButton {anchors.right:parent.right;text:"×";Accessible.name:"Close radial menu";onClicked:overlay.hide()}
             }
         }
     }

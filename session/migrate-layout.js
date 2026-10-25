@@ -10,7 +10,7 @@ for (const panel of panels()) {
         && types.join(",") === "org.kde.plasma.kickoff,org.kde.plasma.showActivityManager,org.kde.plasma.panelspacer,org.kde.plasma.systemtray,org.kde.plasma.digitalclock") {
         panel.alignment = "left";
         panel.lengthMode = "custom";
-        panel.minimumLength = Math.max(320, screenGeometry(panel.screen).width - 380);
+        panel.minimumLength = Math.max(320, screenGeometry(panel.screen).width - 460);
         panel.maximumLength = panel.minimumLength;
     }
 }

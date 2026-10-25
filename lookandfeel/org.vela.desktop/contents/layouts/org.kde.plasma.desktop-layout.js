@@ -14,7 +14,7 @@ topBar.height = 34;
 topBar.floating = false;
 topBar.alignment = "left";
 topBar.lengthMode = "custom";
-topBar.minimumLength = Math.max(320, screenGeometry(topBar.screen).width - 380);
+topBar.minimumLength = Math.max(320, screenGeometry(topBar.screen).width - 460);
 topBar.maximumLength = topBar.minimumLength;
 topBar.addWidget("org.kde.plasma.kickoff");
 topBar.addWidget("org.kde.plasma.showActivityManager");
