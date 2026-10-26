@@ -168,6 +168,31 @@ class Vaela : public Plugin, public InputEventFilter {
     }
     void schedule() { backgroundTimer.start(); if(!arranging) layoutTimer.start(); }
     QString backgroundKey(VirtualDesktop *desktop) const {return activity()+":"+desktop->id();}
+    VirtualDesktop *desktopById(int id) const {
+        for(auto d:VirtualDesktopManager::self()->desktops()) if(int(d->x11DesktopNumber())==id) return d;
+        return nullptr;
+    }
+    // A workspace's background options: its own where it has them, otherwise the shared ones in [General].
+    QJsonObject backgroundOptions(VirtualDesktop *desktop) const {
+        const KConfigGroup general(config,"General");
+        QJsonObject options{{"fill",general.readEntry("BackgroundFill",QStringLiteral("fill"))},{"muted",general.readEntry("BackgroundMuted",true)},
+                            {"volume",general.readEntry("BackgroundVolume",50)},{"speed",general.readEntry("BackgroundSpeed",100)},
+                            {"dim",general.readEntry("BackgroundDim",0)},{"blur",general.readEntry("BackgroundBlur",0)}};
+        const auto own=QJsonDocument::fromJson(KConfigGroup(config,"BackgroundOptions").readEntry(backgroundKey(desktop),QString()).toUtf8()).object();
+        for(auto it=own.begin();it!=own.end();++it) if(options.contains(it.key())) options[it.key()]=it.value();
+        return options;
+    }
+    void writeBackgroundOptions(VirtualDesktop *desktop, const QJsonObject &options) {
+        KConfigGroup(config,"BackgroundOptions").writeEntry(backgroundKey(desktop),QString::fromUtf8(QJsonDocument(options).toJson(QJsonDocument::Compact)));
+    }
+    // Any window open on a monitor, for the setting that pauses videos as soon as one is.
+    bool hasWindows(LogicalOutput *output) const {
+        const QRectF screen=output->geometryF();
+        for(auto w:workspace()->stackingOrder())
+            if(appWindow(w) && w->isShown() && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity()
+               && QRectF(w->frameGeometry()).intersects(screen)) return true;
+        return false;
+    }
     // Whether windows hide most of a monitor, so a video behind them can pause.
     bool occluded(LogicalOutput *output) const {
         const QRect screen=QRectF(output->geometryF()).toAlignedRect();
@@ -274,6 +299,8 @@ public:
         connect(VirtualDesktopManager::self(),&VirtualDesktopManager::desktopRemoved,this,[this](VirtualDesktop *desktop){
             KConfigGroup group(config,"Backgrounds");
             for(const auto &key:group.keyList()) if(key.endsWith(":"+desktop->id())) group.deleteEntry(key);
+            KConfigGroup options(config,"BackgroundOptions");
+            for(const auto &key:options.keyList()) if(key.endsWith(":"+desktop->id())) options.deleteEntry(key);
             config->sync();schedule();
         });
         // A still right-button hold opens the radial menu; a quick click becomes the app's context click on release.
@@ -376,7 +403,7 @@ public Q_SLOTS:
             QJsonArray windows;
             for(auto w:windowOrder) if(appWindow(w) && w->isOnDesktop(d) && w->isOnCurrentActivity()) windows.append(w->caption());
             desks.append(QJsonObject{{"id",int(d->x11DesktopNumber())},{"name",d->name()},{"mode",mode(d)},{"current",d==VirtualDesktopManager::self()->currentDesktop()},{"windows",windows},
-                                     {"background",KConfigGroup(config,"Backgrounds").readEntry(backgroundKey(d),QString())}});
+                                     {"background",KConfigGroup(config,"Backgrounds").readEntry(backgroundKey(d),QString())},{"options",backgroundOptions(d)}});
         }
         QJsonArray outputs; const auto order=workspace()->outputOrder();
         for(auto o:order) {
@@ -389,30 +416,50 @@ public Q_SLOTS:
         return QString::fromUtf8(QJsonDocument(QJsonObject{{"version",QStringLiteral(VAELA_VERSION)},{"mode",mode()},{"desktops",desks},{"activity",activity()},
                                                            {"outputs",outputs},{"shortcuts",keys},{"backgrounds",int(KConfigGroup(config,"Backgrounds").keyList().size())}}).toJson(QJsonDocument::Compact));
     }
-    // What the Vaela wallpaper shows on each monitor Vaela covers, with the playback settings.
+    // What the Vaela wallpaper shows on each monitor Vaela covers: the current workspace's background
+    // and options, and the pause settings shared by all workspaces.
     QString backgrounds() {
         const KConfigGroup general(config,"General");
-        const auto source=KConfigGroup(config,"Backgrounds").readEntry(backgroundKey(VirtualDesktopManager::self()->currentDesktop()),QString());
+        auto current=VirtualDesktopManager::self()->currentDesktop();
+        const auto source=KConfigGroup(config,"Backgrounds").readEntry(backgroundKey(current),QString());
         QJsonObject outputs; bool audio=true;
         for(auto o:workspace()->outputOrder()) if(covers(o)) {
-            outputs[o->name()]=QJsonObject{{"source",source},{"occluded",occluded(o)},{"audio",audio}};
+            outputs[o->name()]=QJsonObject{{"source",source},{"occluded",occluded(o)},{"windows",hasWindows(o)},{"audio",audio}};
             audio=false; // one monitor plays the sound, so the same video on several does not echo
         }
-        return QString::fromUtf8(QJsonDocument(QJsonObject{{"outputs",outputs},{"locked",locked()},
-            {"fill",general.readEntry("BackgroundFill",QStringLiteral("fill"))},{"muted",general.readEntry("BackgroundMuted",true)},
-            {"volume",general.readEntry("BackgroundVolume",50)},{"speed",general.readEntry("BackgroundSpeed",100)},
-            {"dim",general.readEntry("BackgroundDim",0)},{"blur",general.readEntry("BackgroundBlur",0)},
-            {"transition",general.readEntry("BackgroundTransition",600)},{"pauseCovered",general.readEntry("PauseWhenCovered",true)},
-            {"pauseOnBattery",general.readEntry("PauseOnBattery",true)}}).toJson(QJsonDocument::Compact));
+        auto state=backgroundOptions(current);
+        for(const auto &[key,value]:std::initializer_list<std::pair<QString,QJsonValue>>{
+                {"outputs",outputs},{"locked",locked()},{"workspace",backgroundKey(current)},
+                {"transition",general.readEntry("BackgroundTransition",600)},{"pauseCovered",general.readEntry("PauseWhenCovered",true)},
+                {"pauseWindows",general.readEntry("PauseWhenWindows",false)},{"keepAudible",general.readEntry("KeepAudible",true)},
+                {"pauseOnBattery",general.readEntry("PauseOnBattery",true)}})
+            state[key]=value;
+        return QString::fromUtf8(QJsonDocument(state).toJson(QJsonDocument::Compact));
     }
     // url "" removes the workspace's background in the current activity.
     void setBackground(int id, const QString &url) {
         if(locked()) return;
-        for(auto d:VirtualDesktopManager::self()->desktops()) if(int(d->x11DesktopNumber())==id) {
+        if(auto d=desktopById(id)) {
             KConfigGroup group(config,"Backgrounds");
             if(url.isEmpty()) group.deleteEntry(backgroundKey(d)); else group.writeEntry(backgroundKey(d),url);
             config->sync();updateBackgrounds();
         }
+    }
+    // One of fill, muted, volume, speed, dim and blur, for one workspace in the current activity.
+    void setBackgroundOption(int id, const QString &key, const QString &value) {
+        auto d=desktopById(id);
+        if(locked() || !d || !QStringList{"fill","muted","volume","speed","dim","blur"}.contains(key)) return;
+        auto options=backgroundOptions(d);
+        options[key]=key=="fill" ? QJsonValue(value) : key=="muted" ? QJsonValue(value=="true") : QJsonValue(value.toInt());
+        writeBackgroundOptions(d,options);config->sync();updateBackgrounds();
+    }
+    // Gives every workspace in the current activity this workspace's options.
+    void copyBackgroundOptions(int id) {
+        auto from=desktopById(id);
+        if(locked() || !from) return;
+        const auto options=backgroundOptions(from);
+        for(auto d:VirtualDesktopManager::self()->desktops()) writeBackgroundOptions(d,options);
+        config->sync();updateBackgrounds();
     }
     void setMode(const QString &value) {
         if(locked() || !QStringList{"Float","Auto Tiling","Scrollable"}.contains(value)) return;

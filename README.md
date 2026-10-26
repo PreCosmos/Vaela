@@ -56,19 +56,19 @@ Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 4
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 
 ```bash
-rpm-ostree install ./vaela-desktop-1.0.0-1.fc45.x86_64.rpm
+rpm-ostree install ./vaela-desktop-1.1.0-1.fc45.x86_64.rpm
 ```
 
 Replacing an earlier local build (including the old `vela-desktop` package):
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.0.0-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.1.0-1.fc45.x86_64.rpm
 ```
 
 **Fedora Workstation**
 
 ```bash
-sudo dnf install ./vaela-desktop-1.0.0-1.fc45.x86_64.rpm
+sudo dnf install ./vaela-desktop-1.1.0-1.fc45.x86_64.rpm
 ```
 
 Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so
@@ -183,14 +183,22 @@ shows your old picture on the others (change it in Plasma's *Configure Desktop
 and Wallpaper*). Once you remove the last background, your previous wallpaper
 comes back. Backgrounds appear on the monitors Vaela runs on.
 
-| Option | What it does |
+Click a workspace in the list to change **its** options; *Use on every workspace*
+copies them to the others.
+
+| Option, per workspace | What it does |
 |---|---|
 | Scaling | *Fill* (crop to the screen), *Fit* (letterbox) or *Stretch* |
-| Mute videos / Volume | Videos are silent by default. With sound on, only one monitor plays it |
+| Mute / Volume | Videos are silent by default. Sound plays on Plasma's default output, follows it when you switch (to headphones, say), and comes from one monitor only |
 | Playback speed | 0.25× to 2× |
 | Dim / Blur | Darken or soften the background so icons stay readable |
+
+| Option, all workspaces | What it does |
+|---|---|
 | Crossfade between workspaces | 0 to 2 seconds |
-| Pause videos while windows cover the screen | On by default; videos with sound keep playing |
+| Pause videos while windows cover the screen | On by default |
+| Pause videos while any window is open | Off by default |
+| Pause videos even when their sound is on | Off by default, so a video you are listening to keeps playing behind windows |
 | Pause videos on battery | On by default |
 
 Videos play through Qt Multimedia and FFmpeg, with hardware decoding where the

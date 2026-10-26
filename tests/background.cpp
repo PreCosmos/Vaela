@@ -41,6 +41,21 @@ private Q_SLOTS:
         heard.apply(QString(state(R"(,"muted":false,"volume":80)")).replace(R"("occluded":false)",R"("occluded":true)"));
         QVERIFY(heard.playing());
     }
+    void anyWindow() {
+        const auto withWindow=QString(state()).replace(R"("occluded":false,)",R"("occluded":false,"windows":true,)");
+        VaelaBackground b; b.setScreenName("DP-1");
+        b.apply(withWindow);
+        QVERIFY(b.playing());  // off by default
+        b.apply(QString(withWindow).replace(R"("locked":false)",R"("locked":false,"pauseWindows":true)"));
+        QVERIFY(!b.playing());
+        // Heard videos keep playing, unless that is turned off too.
+        b.apply(QString(withWindow).replace(R"("locked":false)",R"("locked":false,"pauseWindows":true,"muted":false)"));
+        QVERIFY(b.playing());
+        b.apply(QString(withWindow).replace(R"("locked":false)",R"("locked":false,"pauseWindows":true,"muted":false,"keepAudible":false)"));
+        QVERIFY(!b.playing());
+        b.apply(state(R"(,"workspace":"default:abc")"));
+        QCOMPARE(b.workspace(),QString("default:abc"));
+    }
     void settingsAreClamped() {
         VaelaBackground b; b.setScreenName("DP-1");
         b.apply(state(R"(,"fill":"stretch","speed":900,"dim":95,"blur":40,"transition":-5)"));

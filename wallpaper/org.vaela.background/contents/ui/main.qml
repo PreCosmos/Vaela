@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import QtQuick
-import QtQuick.Effects
 import org.kde.plasma.plasmoid
 import org.vaela.background
 
@@ -37,22 +36,28 @@ WallpaperItem {
     property var positions: ({})
     property Item front: null
 
-    Connections {
-        target: vaela
-        function onSourceChanged() {root.broken = {}}
-    }
+    // VaelaBackground has one change signal for everything, so these give the parts their own.
+    readonly property string source: vaela.source.toString()
+    readonly property string workspace: vaela.workspace
+    onSourceChanged: broken = {}
     onWantedChanged: Qt.callLater(show)
+    onWorkspaceChanged: Qt.callLater(show)
     Component.onCompleted: show()
 
     function show() {
         const back = front === first ? second : first
         if (front && front.source.toString() === wanted) {
-            // Switched back before the other background was ready; stop loading it.
+            // The same background, maybe on another workspace with options of its own; or switched
+            // back before the other one was ready, which then stops loading.
+            front.owner = vaela.workspace
             if (!fade.running && back.source.toString() !== "") back.unload()
             return
         }
-        if (back.source.toString() === wanted) return
-        back.load(wanted, positions[wanted] || 0)
+        if (back.source.toString() === wanted) {
+            back.owner = vaela.workspace
+            return
+        }
+        back.load(wanted, positions[wanted] || 0, vaela.workspace)
     }
     function reveal(layer) {
         if (layer === front || layer.source.toString() !== wanted) return
@@ -89,13 +94,6 @@ WallpaperItem {
     }
 
     Rectangle {anchors.fill: parent; color: "black"}
-    Item {
-        id: stage
-        anchors.fill: parent
-        layer.enabled: vaela.blur > 0
-        layer.effect: MultiEffect {blurEnabled: true; blur: vaela.blur; blurMax: 64; autoPaddingEnabled: false}
-        Layer {id: first; background: vaela; onReady: root.reveal(first); onFailed: root.failed(first)}
-        Layer {id: second; background: vaela; onReady: root.reveal(second); onFailed: root.failed(second)}
-    }
-    Rectangle {anchors.fill: parent; color: "black"; opacity: vaela.dim}
+    Layer {id: first; background: vaela; onReady: root.reveal(first); onFailed: root.failed(first)}
+    Layer {id: second; background: vaela; onReady: root.reveal(second); onFailed: root.failed(second)}
 }

@@ -372,11 +372,12 @@ QtObject {
         property int originX: 0
         property int originY: 0
         property string recording: ""   // shortcut waiting for keys
+        property int backgroundTarget: 0  // workspace whose background options Settings shows; 0 is the current one
         property var clash: null        // {id, keys, by}: keys that something else already uses
         color: "transparent"; flags:Qt.FramelessWindowHint
         onVisibleChanged: if(!visible) {
             if(recording) vaela.call("recordShortcut",[""])
-            recording=""; clash=null
+            recording=""; clash=null; backgroundTarget=0
         }
         Component.onCompleted: root.applyPalette(overlay)
         title: view === "radial-settings" ? "Radial Menu" : view === "settings" ? "Vaela Settings" : view === "radial" ? "Vaela Radial Menu" : "Quick Commands"
@@ -498,18 +499,24 @@ QtObject {
                                 }
                             }
                             Card {
+                                id: backgroundsCard
                                 title: "Backgrounds"
-                                subtitle: "A video or picture for each workspace in this activity. Workspaces without one keep your Plasma wallpaper. Videos pause while windows cover the screen."
+                                subtitle: "A video or picture for each workspace in this activity. Workspaces without one keep your Plasma wallpaper. Click a workspace to change its options."
                                 Repeater {
                                     model: vaela.state.desktops || []
                                     delegate: RowLayout {
                                         id: backgroundRow
                                         required property var modelData
+                                        readonly property bool selected: backgroundsCard.optionsFor.id === modelData.id
                                         Layout.fillWidth: true; spacing: 10
-                                        BackgroundPreview {source: backgroundRow.modelData.background || ""; live: overlay.visible && overlay.view === "settings"}
+                                        TapHandler {onTapped: overlay.backgroundTarget=backgroundRow.modelData.id}
+                                        BackgroundPreview {
+                                            source: backgroundRow.modelData.background || ""; live: overlay.visible && overlay.view === "settings"
+                                            border.color: backgroundRow.selected ? Theme.accent : Theme.border; border.width: backgroundRow.selected ? 2 : 1
+                                        }
                                         ColumnLayout {
                                             Layout.fillWidth: true; spacing: 2
-                                            Text {text: backgroundRow.modelData.name; color: Theme.text; font.pixelSize: 13; font.weight: backgroundRow.modelData.current ? Font.DemiBold : Font.Normal; elide: Text.ElideRight; Layout.fillWidth: true}
+                                            Text {text: backgroundRow.modelData.name; color: backgroundRow.selected ? Theme.accent : Theme.text; font.pixelSize: 13; font.weight: backgroundRow.selected ? Font.DemiBold : Font.Normal; elide: Text.ElideRight; Layout.fillWidth: true}
                                             Text {text: root.fileName(backgroundRow.modelData.background) || "Plasma wallpaper"; color: Theme.muted; font.pixelSize: 11; elide: Text.ElideMiddle; Layout.fillWidth: true}
                                         }
                                         VButton {text: "Choose…"; iconName: "document-open"; onClicked: {backgroundPicker.desktop=backgroundRow.modelData.id;backgroundPicker.open()}}
@@ -525,6 +532,20 @@ QtObject {
                                         }
                                     }
                                 }
+                                // The workspace the options below apply to: the one picked above, or the current one.
+                                readonly property var optionsFor: {
+                                    const desktops=vaela.state.desktops || []
+                                    return desktops.find(d=>d.id === overlay.backgroundTarget) || desktops.find(d=>d.current) || desktops[0] || ({id:0,name:"",options:{}})
+                                }
+                                readonly property var options: optionsFor.options || ({})
+                                RowLayout {
+                                    Layout.fillWidth: true; Layout.topMargin: 6; spacing: 8
+                                    Text {text: "Options for "+backgroundsCard.optionsFor.name; color: Theme.text; font.pixelSize: 13; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight}
+                                    VButton {
+                                        text: "Use on every workspace"; iconName: "edit-copy"; flat: true; implicitHeight: 28
+                                        onClicked: vaela.copyBackgroundOptions(backgroundsCard.optionsFor.id)
+                                    }
+                                }
                                 SettingRow {
                                     label: "Scaling"
                                     Repeater {
@@ -532,44 +553,53 @@ QtObject {
                                         VButton {
                                             required property var modelData
                                             text: modelData.label; iconName: modelData.icon; implicitHeight: 30
-                                            active: vaela.background.fill === modelData.value
-                                            onClicked: vaela.setting("BackgroundFill",modelData.value)
+                                            active: backgroundsCard.options.fill === modelData.value
+                                            onClicked: vaela.setBackgroundOption(backgroundsCard.optionsFor.id,"fill",modelData.value)
                                         }
                                     }
                                 }
                                 SettingRow {
-                                    label: "Mute videos"
-                                    Switch {checked: vaela.background.muted; onToggled: vaela.setting("BackgroundMuted",checked)}
+                                    label: "Mute"
+                                    Switch {checked: !!backgroundsCard.options.muted; onToggled: vaela.setBackgroundOption(backgroundsCard.optionsFor.id,"muted",checked)}
                                 }
                                 SettingRow {
                                     label: "Volume"
-                                    opacity: vaela.background.muted ? 0.5 : 1
-                                    Slider {from: 0; to: 100; stepSize: 5; value: vaela.background.volume; enabled: !vaela.background.muted; Layout.preferredWidth: 200; onMoved: vaela.setting("BackgroundVolume",Math.round(value))}
-                                    Text {text: vaela.background.volume+" %"; color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight}
+                                    opacity: backgroundsCard.options.muted ? 0.5 : 1
+                                    Slider {from: 0; to: 100; stepSize: 5; value: backgroundsCard.options.volume || 0; enabled: !backgroundsCard.options.muted; Layout.preferredWidth: 200; onMoved: vaela.setBackgroundOption(backgroundsCard.optionsFor.id,"volume",Math.round(value))}
+                                    Text {text: (backgroundsCard.options.volume || 0)+" %"; color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight}
                                 }
                                 SettingRow {
                                     label: "Playback speed"
-                                    Slider {from: 25; to: 200; stepSize: 25; value: vaela.background.speed; Layout.preferredWidth: 200; onMoved: vaela.setting("BackgroundSpeed",Math.round(value))}
-                                    Text {text: (vaela.background.speed/100).toFixed(2)+"×"; color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight}
+                                    Slider {from: 25; to: 200; stepSize: 25; value: backgroundsCard.options.speed || 100; Layout.preferredWidth: 200; onMoved: vaela.setBackgroundOption(backgroundsCard.optionsFor.id,"speed",Math.round(value))}
+                                    Text {text: ((backgroundsCard.options.speed || 100)/100).toFixed(2)+"×"; color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight}
                                 }
                                 SettingRow {
                                     label: "Dim"
-                                    Slider {from: 0; to: 80; stepSize: 5; value: vaela.background.dim; Layout.preferredWidth: 200; onMoved: vaela.setting("BackgroundDim",Math.round(value))}
-                                    Text {text: vaela.background.dim+" %"; color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight}
+                                    Slider {from: 0; to: 80; stepSize: 5; value: backgroundsCard.options.dim || 0; Layout.preferredWidth: 200; onMoved: vaela.setBackgroundOption(backgroundsCard.optionsFor.id,"dim",Math.round(value))}
+                                    Text {text: (backgroundsCard.options.dim || 0)+" %"; color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight}
                                 }
                                 SettingRow {
                                     label: "Blur"
-                                    Slider {from: 0; to: 100; stepSize: 5; value: vaela.background.blur; Layout.preferredWidth: 200; onMoved: vaela.setting("BackgroundBlur",Math.round(value))}
-                                    Text {text: vaela.background.blur+" %"; color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight}
+                                    Slider {from: 0; to: 100; stepSize: 5; value: backgroundsCard.options.blur || 0; Layout.preferredWidth: 200; onMoved: vaela.setBackgroundOption(backgroundsCard.optionsFor.id,"blur",Math.round(value))}
+                                    Text {text: (backgroundsCard.options.blur || 0)+" %"; color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight}
                                 }
+                                Text {text: "All workspaces"; color: Theme.text; font.pixelSize: 13; font.weight: Font.DemiBold; Layout.topMargin: 6}
                                 SettingRow {
                                     label: "Crossfade between workspaces"
                                     Slider {from: 0; to: 2000; stepSize: 100; value: vaela.background.transition; Layout.preferredWidth: 200; onMoved: vaela.setting("BackgroundTransition",Math.round(value))}
                                     Text {text: (vaela.background.transition/1000).toFixed(1)+" s"; color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight}
                                 }
                                 SettingRow {
-                                    label: "Pause videos while windows cover the screen (unless their sound is on)"
+                                    label: "Pause videos while windows cover the screen"
                                     Switch {checked: vaela.background.pauseCovered; onToggled: vaela.setting("PauseWhenCovered",checked)}
+                                }
+                                SettingRow {
+                                    label: "Pause videos while any window is open"
+                                    Switch {checked: vaela.background.pauseWindows; onToggled: vaela.setting("PauseWhenWindows",checked)}
+                                }
+                                SettingRow {
+                                    label: "Pause videos even when their sound is on"
+                                    Switch {checked: !vaela.background.keepAudible; onToggled: vaela.setting("KeepAudible",!checked)}
                                 }
                                 SettingRow {
                                     label: "Pause videos on battery"
@@ -742,7 +772,7 @@ QtObject {
                 nameFilters: ["Videos and pictures (*.mp4 *.m4v *.mkv *.webm *.mov *.avi *.ogv *.mpg *.mpeg *.wmv *.png *.jpg *.jpeg *.webp *.avif *.jxl *.gif *.bmp *.svg)",
                               "Videos (*.mp4 *.m4v *.mkv *.webm *.mov *.avi *.ogv *.mpg *.mpeg *.wmv)",
                               "Pictures (*.png *.jpg *.jpeg *.webp *.avif *.jxl *.gif *.bmp *.svg)", "All files (*)"]
-                onAccepted: vaela.setBackground(desktop,selectedFile.toString())
+                onAccepted: {overlay.backgroundTarget=desktop;vaela.setBackground(desktop,selectedFile.toString())}
             }
 
             // Radial menu: items around a hub; the hovered item grows and opens on release or click.

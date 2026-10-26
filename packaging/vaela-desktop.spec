@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.0.0
+Version:        1.1.0
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -85,6 +85,16 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Mon Oct 26 2026 Vaela contributors - 1.1.0-1
+- Play background sound on Plasma's default output and follow it when it changes,
+  for example to headphones; it used to stay on the device that was the default
+  when Plasma started.
+- Give each workspace its own background options: scaling, mute, volume, speed,
+  dim and blur, with a button to use one workspace's options on all of them.
+- Add "Pause videos while any window is open" and "Pause videos even when their
+  sound is on".
+- A background that failed to load is tried again once its workspace gets a new one.
+
 * Mon Oct 26 2026 Vaela contributors - 1.0.0-1
 - Give each workspace its own video or picture background, chosen in Vaela Settings
   or from the workspace bar's menu, and crossfaded when you switch. Workspaces

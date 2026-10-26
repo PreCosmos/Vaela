@@ -13,6 +13,8 @@ class VaelaBackground : public QObject {
     QML_ELEMENT
     Q_PROPERTY(QString screenName READ screenName WRITE setScreenName NOTIFY changed)
     Q_PROPERTY(QUrl source READ source NOTIFY changed)
+    // The workspace the options belong to, so a background fading out keeps its own.
+    Q_PROPERTY(QString workspace READ workspace NOTIFY changed)
     Q_PROPERTY(bool playing READ playing NOTIFY changed)
     Q_PROPERTY(qreal volume READ volume NOTIFY changed)
     Q_PROPERTY(QString fill READ fill NOTIFY changed)
@@ -25,6 +27,7 @@ public:
     QString screenName() const {return m_screen;}
     void setScreenName(const QString &name);
     QUrl source() const;
+    QString workspace() const {return m_data.value("workspace").toString();}
     bool playing() const;
     qreal volume() const;
     QString fill() const;

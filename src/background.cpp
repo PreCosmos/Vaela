@@ -77,11 +77,14 @@ qreal VaelaBackground::volume() const {
     return std::clamp(m_data.value("volume").toInt(50),0,100)/100.;
 }
 
-// Videos pause behind windows unless they are heard, on battery if asked to, and under the lock screen.
+// Videos pause under the lock screen, on battery and behind windows as the settings ask, except that
+// a video with its sound on keeps playing behind windows unless told otherwise.
 bool VaelaBackground::playing() const {
     if(source().isEmpty() || m_data.value("locked").toBool()) return false;
     if(m_onBattery && m_data.value("pauseOnBattery").toBool(true)) return false;
-    return !(output().value("occluded").toBool() && m_data.value("pauseCovered").toBool(true) && volume()==0);
+    if(volume()>0 && m_data.value("keepAudible").toBool(true)) return true;
+    if(output().value("occluded").toBool() && m_data.value("pauseCovered").toBool(true)) return false;
+    return !(output().value("windows").toBool() && m_data.value("pauseWindows").toBool(false));
 }
 
 QString VaelaBackground::fill() const {

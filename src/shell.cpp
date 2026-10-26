@@ -54,15 +54,16 @@ public:
     int gap() const {return KConfigGroup(config,"General").readEntry("Gap",8);}
     int radialDelay() const {return std::clamp(KConfigGroup(config,"General").readEntry("RadialDelay",500),150,2000);}
     QString monitors() const {return KConfigGroup(config,"General").readEntry("Monitors",QStringLiteral("primary"));}
-    // Playback settings for workspace backgrounds, with their defaults.
+    // Background settings shared by all workspaces; each workspace's own options come with the state.
     QVariantMap background() const {
         const KConfigGroup general(config,"General");
-        return {{"fill",general.readEntry("BackgroundFill",QStringLiteral("fill"))},{"muted",general.readEntry("BackgroundMuted",true)},
-                {"volume",general.readEntry("BackgroundVolume",50)},{"speed",general.readEntry("BackgroundSpeed",100)},
-                {"dim",general.readEntry("BackgroundDim",0)},{"blur",general.readEntry("BackgroundBlur",0)},
-                {"transition",general.readEntry("BackgroundTransition",600)},{"pauseCovered",general.readEntry("PauseWhenCovered",true)},
+        return {{"transition",general.readEntry("BackgroundTransition",600)},{"pauseCovered",general.readEntry("PauseWhenCovered",true)},
+                {"pauseWindows",general.readEntry("PauseWhenWindows",false)},{"keepAudible",general.readEntry("KeepAudible",true)},
                 {"pauseOnBattery",general.readEntry("PauseOnBattery",true)}};
     }
+    // key is one of fill, muted, volume, speed, dim and blur.
+    Q_INVOKABLE void setBackgroundOption(int desktop,const QString &key,const QVariant &value) {call("setBackgroundOption",{desktop,key,value.toString()});}
+    Q_INVOKABLE void copyBackgroundOptions(int desktop) {call("copyBackgroundOptions",{desktop});}
     // "video", "image" or "" for a background's address, to pick how to preview it.
     Q_INVOKABLE QString mediaKind(const QString &url) const {
         if(url.isEmpty()) return {};
@@ -140,12 +141,12 @@ for (const d of desktops()) {
     Q_INVOKABLE void call(QString method,QVariantList args={}) {
         auto message=QDBusMessage::createMethodCall("org.vaela.Controller","/Controller","org.vaela.Controller",method);
         // JavaScript numbers arrive as doubles; these D-Bus methods require an int.
-        if(QStringList{"desktop","renameDesktop","removeDesktop","setBackground"}.contains(method) && !args.isEmpty()) args[0]=args[0].toInt();
+        if(QStringList{"desktop","renameDesktop","removeDesktop","setBackground","setBackgroundOption","copyBackgroundOptions"}.contains(method) && !args.isEmpty()) args[0]=args[0].toInt();
         message.setArguments(args);QDBusConnection::sessionBus().asyncCall(message);
     }
     Q_INVOKABLE void setting(QString key,QVariant value) {
-        if(!QStringList{"Gestures","Threshold","Gap","Dark","RadialDelay","Monitors","BackgroundFill","BackgroundMuted","BackgroundVolume",
-                        "BackgroundSpeed","BackgroundDim","BackgroundBlur","BackgroundTransition","PauseWhenCovered","PauseOnBattery"}.contains(key)) return;
+        if(!QStringList{"Gestures","Threshold","Gap","Dark","RadialDelay","Monitors","BackgroundTransition","PauseWhenCovered","PauseWhenWindows",
+                        "KeepAudible","PauseOnBattery"}.contains(key)) return;
         KConfigGroup(config,"General").writeEntry(key,value);config->sync();call("reload");emit changed();
     }
     Q_INVOKABLE void launch(QString name) {
