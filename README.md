@@ -43,7 +43,7 @@ login screen.
 
 ## Installing
 
-Build the RPM (see [Building](#building)) or download one from the releases page, then:
+Build the RPM (see [Building](#building)) or download one from the [releases page](https://github.com/PreCosmos/Vaela/releases), then:
 
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 

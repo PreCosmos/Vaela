@@ -1,6 +1,6 @@
 version = 1
 SPDX-PackageName = "Vaela"
-SPDX-PackageDownloadLocation = "https://github.com/"
+SPDX-PackageDownloadLocation = "https://github.com/PreCosmos/Vaela"
 
 # Everything in this repository is GPL-2.0-or-later. Files with their own
 # SPDX header keep it; this covers the ones that cannot carry a comment.

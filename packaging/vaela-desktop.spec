@@ -3,6 +3,7 @@ Version:        0.5.0
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
+URL:            https://github.com/PreCosmos/Vaela
 Source0:        %{name}-%{version}.tar.gz
 %global kwin_version %(rpm -q --qf '%%{VERSION}' kwin-devel)
 # Vela was renamed to Vaela in 0.5.0.
