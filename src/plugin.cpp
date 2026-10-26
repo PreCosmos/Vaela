@@ -26,6 +26,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
+#include <QRegion>
 #include <QTimer>
 #include <algorithm>
 #include <utility>
@@ -35,7 +36,8 @@ class Vaela : public Plugin, public InputEventFilter {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.vaela.Controller")
     KSharedConfig::Ptr config = KSharedConfig::openConfig("vaelarc");
-    QTimer hold, layoutTimer;
+    QTimer hold, layoutTimer, backgroundTimer;
+    QString lastBackgrounds;
     QElapsedTimer hoverClock;
     Gesture gesture;
     QPointer<Window> target, lastWindow;
@@ -164,7 +166,23 @@ class Vaela : public Plugin, public InputEventFilter {
     static bool modifierKey(Qt::Key key) {
         return QList<Qt::Key>{Qt::Key_Shift,Qt::Key_Control,Qt::Key_Meta,Qt::Key_Alt,Qt::Key_AltGr,Qt::Key_Super_L,Qt::Key_Super_R,Qt::Key_Hyper_L,Qt::Key_Hyper_R}.contains(key);
     }
-    void schedule() { if(!arranging) layoutTimer.start(); }
+    void schedule() { backgroundTimer.start(); if(!arranging) layoutTimer.start(); }
+    QString backgroundKey(VirtualDesktop *desktop) const {return activity()+":"+desktop->id();}
+    // Whether windows hide most of a monitor, so a video behind them can pause.
+    bool occluded(LogicalOutput *output) const {
+        const QRect screen=QRectF(output->geometryF()).toAlignedRect();
+        QRegion covered;
+        for(auto w:workspace()->stackingOrder())
+            if(appWindow(w) && w->isShown() && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity())
+                covered+=QRectF(w->frameGeometry()).toAlignedRect().intersected(screen);
+        qint64 area=0;
+        for(const QRect &r:covered) area+=qint64(r.width())*r.height();
+        return area*100>=qint64(screen.width())*screen.height()*85;
+    }
+    void updateBackgrounds() {
+        const auto json=backgrounds();
+        if(json!=lastBackgrounds) {lastBackgrounds=json;Q_EMIT backgroundsChanged(json);}
+    }
     bool appWindow(Window *w) const { return w && w->isNormalWindow() && !w->isSpecialWindow() && !w->isInternal() && !w->inherits("KWin::LayerShellV1Window") && w->resourceClass()!="vaela-shell"; }
     bool eligible(Window *w) const {
         return appWindow(w) && w->isMovable() && w->isResizable()
@@ -176,6 +194,8 @@ class Vaela : public Plugin, public InputEventFilter {
         connect(w,&Window::minimizedChanged,this,[this]{schedule();});
         connect(w,&Window::desktopsChanged,this,[this]{schedule();});
         connect(w,&Window::fullScreenChanged,this,[this]{schedule();});
+        connect(w,&Window::frameGeometryChanged,this,[this]{backgroundTimer.start();});
+        connect(w,&Window::hiddenChanged,this,[this]{backgroundTimer.start();});
         connect(w,&Window::interactiveMoveResizeStarted,this,[this,w]{if(w->isInteractiveResize()) resizing.insert(w);});
         connect(w,&Window::interactiveMoveResizeStepped,this,[this,w](const RectF &geometry){
             // KWin can report the start before the operation counts as a resize; pick it up here too,
@@ -246,8 +266,16 @@ public:
         if(qEnvironmentVariable("VAELA_SESSION")!="1") return;
         input()->installInputEventFilter(this);
         QDBusConnection::sessionBus().registerService("org.vaela.Controller");
-        QDBusConnection::sessionBus().registerObject("/Controller",this,QDBusConnection::ExportAllSlots);
-        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;target=nullptr;capturedKeys.clear();recording.clear();});
+        QDBusConnection::sessionBus().registerObject("/Controller",this,QDBusConnection::ExportAllSlots|QDBusConnection::ExportAllSignals);
+        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;target=nullptr;capturedKeys.clear();recording.clear();backgroundTimer.start();});
+        // Window moves and resizes arrive in bursts; the wallpaper hears the outcome once.
+        backgroundTimer.setSingleShot(true); backgroundTimer.setInterval(60);
+        connect(&backgroundTimer,&QTimer::timeout,this,&Vaela::updateBackgrounds);
+        connect(VirtualDesktopManager::self(),&VirtualDesktopManager::desktopRemoved,this,[this](VirtualDesktop *desktop){
+            KConfigGroup group(config,"Backgrounds");
+            for(const auto &key:group.keyList()) if(key.endsWith(":"+desktop->id())) group.deleteEntry(key);
+            config->sync();schedule();
+        });
         // A still right-button hold opens the radial menu; a quick click becomes the app's context click on release.
         hold.setTimerType(Qt::PreciseTimer);
         hold.setSingleShot(true);
@@ -347,7 +375,8 @@ public Q_SLOTS:
         for(auto d:VirtualDesktopManager::self()->desktops()) {
             QJsonArray windows;
             for(auto w:windowOrder) if(appWindow(w) && w->isOnDesktop(d) && w->isOnCurrentActivity()) windows.append(w->caption());
-            desks.append(QJsonObject{{"id",int(d->x11DesktopNumber())},{"name",d->name()},{"mode",mode(d)},{"current",d==VirtualDesktopManager::self()->currentDesktop()},{"windows",windows}});
+            desks.append(QJsonObject{{"id",int(d->x11DesktopNumber())},{"name",d->name()},{"mode",mode(d)},{"current",d==VirtualDesktopManager::self()->currentDesktop()},{"windows",windows},
+                                     {"background",KConfigGroup(config,"Backgrounds").readEntry(backgroundKey(d),QString())}});
         }
         QJsonArray outputs; const auto order=workspace()->outputOrder();
         for(auto o:order) {
@@ -358,7 +387,32 @@ public Q_SLOTS:
         for(auto a:globals) keys.append(QJsonObject{{"id",a->objectName()},{"label",a->text()},{"keys",keyText(KGlobalAccel::self()->shortcut(a))},{"default",keyText(KGlobalAccel::self()->defaultShortcut(a))}});
         for(const auto &k:layoutKeys()) keys.append(QJsonObject{{"id",k.id},{"label",k.label},{"keys",layoutKeyText(k)},{"default",k.keys},{"layout",k.tiled ? "Auto Tiling and Scrollable" : "Scrollable"}});
         return QString::fromUtf8(QJsonDocument(QJsonObject{{"version",QStringLiteral(VAELA_VERSION)},{"mode",mode()},{"desktops",desks},{"activity",activity()},
-                                                           {"outputs",outputs},{"shortcuts",keys}}).toJson(QJsonDocument::Compact));
+                                                           {"outputs",outputs},{"shortcuts",keys},{"backgrounds",int(KConfigGroup(config,"Backgrounds").keyList().size())}}).toJson(QJsonDocument::Compact));
+    }
+    // What the Vaela wallpaper shows on each monitor Vaela covers, with the playback settings.
+    QString backgrounds() {
+        const KConfigGroup general(config,"General");
+        const auto source=KConfigGroup(config,"Backgrounds").readEntry(backgroundKey(VirtualDesktopManager::self()->currentDesktop()),QString());
+        QJsonObject outputs; bool audio=true;
+        for(auto o:workspace()->outputOrder()) if(covers(o)) {
+            outputs[o->name()]=QJsonObject{{"source",source},{"occluded",occluded(o)},{"audio",audio}};
+            audio=false; // one monitor plays the sound, so the same video on several does not echo
+        }
+        return QString::fromUtf8(QJsonDocument(QJsonObject{{"outputs",outputs},{"locked",locked()},
+            {"fill",general.readEntry("BackgroundFill",QStringLiteral("fill"))},{"muted",general.readEntry("BackgroundMuted",true)},
+            {"volume",general.readEntry("BackgroundVolume",50)},{"speed",general.readEntry("BackgroundSpeed",100)},
+            {"dim",general.readEntry("BackgroundDim",0)},{"blur",general.readEntry("BackgroundBlur",0)},
+            {"transition",general.readEntry("BackgroundTransition",600)},{"pauseCovered",general.readEntry("PauseWhenCovered",true)},
+            {"pauseOnBattery",general.readEntry("PauseOnBattery",true)}}).toJson(QJsonDocument::Compact));
+    }
+    // url "" removes the workspace's background in the current activity.
+    void setBackground(int id, const QString &url) {
+        if(locked()) return;
+        for(auto d:VirtualDesktopManager::self()->desktops()) if(int(d->x11DesktopNumber())==id) {
+            KConfigGroup group(config,"Backgrounds");
+            if(url.isEmpty()) group.deleteEntry(backgroundKey(d)); else group.writeEntry(backgroundKey(d),url);
+            config->sync();updateBackgrounds();
+        }
     }
     void setMode(const QString &value) {
         if(locked() || !QStringList{"Float","Auto Tiling","Scrollable"}.contains(value)) return;
@@ -431,6 +485,8 @@ public Q_SLOTS:
             if(name=="maximize") {bool max=w->maximizeMode()!=MaximizeFull;w->setMaximize(max,max);}
         }
     }
+Q_SIGNALS:
+    void backgroundsChanged(const QString &json);
 };
 class Factory : public PluginFactory {
     Q_OBJECT

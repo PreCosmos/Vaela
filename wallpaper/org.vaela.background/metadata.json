@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "The Vaela contributors"
+            }
+        ],
+        "Description": "A video or picture for each workspace, chosen in Vaela Settings",
+        "Icon": "preferences-desktop-wallpaper",
+        "Id": "org.vaela.background",
+        "License": "GPL-2.0-or-later",
+        "Name": "Vaela Workspace Backgrounds",
+        "Website": "https://github.com/PreCosmos/Vaela"
+    },
+    "X-KDE-ParentApp": "org.kde.plasmashell"
+}

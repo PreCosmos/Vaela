@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
+  <kcfgfile name=""/>
+
+  <!-- Per-workspace backgrounds live in vaelarc; Vaela sets these when it switches a desktop over. -->
+  <group name="General">
+    <entry name="Fallback" type="String">
+      <label>Picture for workspaces without a Vaela background, as Plasma's image wallpaper stores it</label>
+      <default></default>
+    </entry>
+    <entry name="Previous" type="String">
+      <label>Wallpaper plugin to restore once no workspace has a Vaela background</label>
+      <default>org.kde.image</default>
+    </entry>
+  </group>
+</kcfg>

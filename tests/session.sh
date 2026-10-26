@@ -51,8 +51,9 @@ sleep 1
 qdbus-qt6 org.vaela.InputProbe /InputProbe org.vaela.InputProbe.surfaceAt 640 400 | python3 -c 'import sys,json;s=json.load(sys.stdin);assert (s.get("w"),s.get("h"))==(680,660),s'
 qdbus-qt6 org.vaela.Shell /Shell org.vaela.Shell.showView dismiss 0 0
 qdbus-qt6 org.vaela.Controller /Controller org.vaela.Controller.setMode Float
-# Breeze's TextArea and the portal registration warn about themselves; anything else fails.
-if grep -vE 'org/kde/breeze/TextArea\.qml|qt\.qpa\.services: Failed to register with host portal' "$VAELA_TEST_BUILD/shell-test.log" | grep -q .; then
+# Breeze's TextArea and the portal registration warn about themselves, and Qt Multimedia names its
+# FFmpeg once it loads; anything else fails.
+if grep -vE 'org/kde/breeze/TextArea\.qml|qt\.qpa\.services: Failed to register with host portal|qt\.multimedia\.ffmpeg: Using Qt multimedia with FFmpeg' "$VAELA_TEST_BUILD/shell-test.log" | grep -q .; then
     cat "$VAELA_TEST_BUILD/shell-test.log"; exit 1
 fi
 exit "$status"

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(vaela VERSION 0.7.0 LANGUAGES CXX)
+project(vaela VERSION 1.0.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 set(CMAKE_CXX_STANDARD 20)
@@ -41,6 +41,22 @@ target_link_libraries(vaela-shell PRIVATE Qt6::Quick Qt6::Qml Qt6::QuickControls
 target_compile_definitions(vaela-shell PRIVATE VAELA_QML_PATH="${VAELA_DATADIR}/Main.qml")
 install(TARGETS vaela-shell DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES src/Main.qml src/RadialEditor.qml src/Theme.qml src/VButton.qml src/Shadow.qml src/qmldir session/migrate-layout.js DESTINATION ${VAELA_DATADIR})
+# Per-workspace backgrounds: a Plasma wallpaper, and the QML module it hears from Vaela through.
+qt_policy(SET QTP0001 NEW)
+qt_add_qml_module(vaelabackground
+    URI org.vaela.background
+    VERSION 1.0
+    PLUGIN_TARGET vaelabackground
+    SOURCES src/background.cpp src/background.h
+    OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qml/org/vaela/background")
+target_include_directories(vaelabackground PRIVATE src)
+target_link_libraries(vaelabackground PRIVATE Qt6::Qml Qt6::DBus)
+set(VAELA_QMLDIR "${CMAKE_INSTALL_LIBDIR}/qt6/qml/org/vaela/background")
+install(TARGETS vaelabackground LIBRARY DESTINATION "${VAELA_QMLDIR}")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/qml/org/vaela/background/qmldir"
+              "${CMAKE_CURRENT_BINARY_DIR}/qml/org/vaela/background/vaelabackground.qmltypes"
+        DESTINATION "${VAELA_QMLDIR}")
+install(DIRECTORY wallpaper/org.vaela.background DESTINATION "${CMAKE_INSTALL_DATADIR}/plasma/wallpapers")
 # Plasma's autostart goes through systemd, which only scans the standard autostart folders.
 install(FILES session/vaela-shell.desktop DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/xdg/autostart)
 include(CTest)
@@ -49,6 +65,12 @@ if(BUILD_TESTING)
     target_include_directories(gesture-test PRIVATE src)
     target_link_libraries(gesture-test PRIVATE Qt6::Test Qt6::Gui)
     add_test(NAME gestures COMMAND gesture-test)
+endif()
+if(BUILD_TESTING)
+    add_executable(background-test tests/background.cpp src/background.cpp)
+    target_include_directories(background-test PRIVATE src)
+    target_link_libraries(background-test PRIVATE Qt6::Qml Qt6::DBus Qt6::Test)
+    add_test(NAME background COMMAND background-test)
 endif()
 if(BUILD_TESTING)
     add_executable(vaela-window-test tests/windows.cpp)

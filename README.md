@@ -36,6 +36,8 @@ login screen.
 - **Multiple monitors.** Run Vaela on the primary monitor, on all of them, or on
   the ones you pick; the others behave like plain Plasma.
 - **Your own shortcuts.** Every Vaela key can be changed in Settings.
+- **Workspace backgrounds.** Give each workspace its own video or picture, with
+  sound, scaling, speed, dim and blur options.
 
 ## Requirements
 
@@ -54,19 +56,19 @@ Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 4
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 
 ```bash
-rpm-ostree install ./vaela-desktop-0.7.0-1.fc45.x86_64.rpm
+rpm-ostree install ./vaela-desktop-1.0.0-1.fc45.x86_64.rpm
 ```
 
 Replacing an earlier local build (including the old `vela-desktop` package):
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./vaela-desktop-0.7.0-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.0.0-1.fc45.x86_64.rpm
 ```
 
 **Fedora Workstation**
 
 ```bash
-sudo dnf install ./vaela-desktop-0.7.0-1.fc45.x86_64.rpm
+sudo dnf install ./vaela-desktop-1.0.0-1.fc45.x86_64.rpm
 ```
 
 Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so
@@ -167,12 +169,48 @@ gestures and the radial menu, and windows follow the workspace's layout. On the
 others windows float and right-click works as in plain Plasma. Quick Commands and
 Settings open on the monitor you are using, if Vaela runs there.
 
+### Workspace backgrounds
+
+Each workspace can have its own **video or picture** as its background. Choose
+one under **Backgrounds** in Vaela Settings, or from a workspace's ⋯ menu in the
+workspace bar (*Background…*). The copy button uses a background for every
+workspace, and the bin removes it. Switching workspaces crossfades between them,
+and a video carries on where it left off when you come back.
+
+Workspaces without a background keep your Plasma wallpaper. While any workspace
+has one, Plasma's desktops use the *Vaela Workspace Backgrounds* wallpaper, which
+shows your old picture on the others (change it in Plasma's *Configure Desktop
+and Wallpaper*). Once you remove the last background, your previous wallpaper
+comes back. Backgrounds appear on the monitors Vaela runs on.
+
+| Option | What it does |
+|---|---|
+| Scaling | *Fill* (crop to the screen), *Fit* (letterbox) or *Stretch* |
+| Mute videos / Volume | Videos are silent by default. With sound on, only one monitor plays it |
+| Playback speed | 0.25× to 2× |
+| Dim / Blur | Darken or soften the background so icons stay readable |
+| Crossfade between workspaces | 0 to 2 seconds |
+| Pause videos while windows cover the screen | On by default; videos with sound keep playing |
+| Pause videos on battery | On by default |
+
+Videos play through Qt Multimedia and FFmpeg, with hardware decoding where the
+graphics driver offers it. WebM (VP9, AV1) plays everywhere. MP4 (H.264, HEVC)
+needs a full FFmpeg build, which Bazzite ships and Fedora gets from RPM Fusion
+(`ffmpeg-libs`); pictures can be PNG, JPEG, WebP, AVIF, JPEG XL, SVG, BMP or an
+animated GIF. A file that will not play shows the Plasma wallpaper instead.
+
+Backgrounds can also be set from a script:
+
+```bash
+qdbus-qt6 org.vaela.Shell /Shell setBackground 2 file:///home/you/Videos/rain.webm
+```
+
 ## Customizing
 
 Open **Vaela Settings** (Meta+Ctrl+S, the gear in the layout switch, or the
-radial menu) to set the gap between windows, turn gestures on or off, change the
-stroke length and the radial menu's hold time, rebind every gesture and keyboard
-shortcut, and choose the monitors Vaela runs on.
+radial menu) to set the gap between windows, choose workspace backgrounds, turn
+gestures on or off, change the stroke length and the radial menu's hold time,
+rebind every gesture and keyboard shortcut, and choose the monitors Vaela runs on.
 
 **Customize radial menu…** edits the radial menu:
 
@@ -183,8 +221,8 @@ shortcut, and choose the monitors Vaela runs on.
 - The arrows reorder items and the bin removes one. Menus with more than eight
   items get extra pages.
 
-Settings, gesture bindings, layout keys, the radial menu and remembered column
-widths live in `~/.config/vaelarc`; the global shortcuts live with Plasma's, in
+Settings, gesture bindings, layout keys, workspace backgrounds, the radial menu and
+remembered column widths live in `~/.config/vaelarc`; the global shortcuts live with Plasma's, in
 `~/.config/kglobalshortcutsrc`.
 
 ## Building
@@ -227,6 +265,7 @@ Run the tests, including a private software-rendered KWin session:
 | `session/startvaela` | Starts Plasma's Wayland session with Vaela's defaults (`/usr/share/vaela/xdg`) layered under your own `~/.config`, and carries settings over from the pre-0.5 "Vela" names |
 | `src/plugin.cpp` | KWin plugin: gestures, the right-click hold, layouts, shortcuts, and the `org.vaela.Controller` D-Bus service. It is active only when `VAELA_SESSION=1`, which `startvaela` sets |
 | `src/shell.cpp`, `src/*.qml` | `vaela-shell`: the layout switch, workspace bar, radial menu, Quick Commands and Settings, as layer-shell surfaces. It autostarts from `/etc/xdg/autostart` and exits unless the plugin's D-Bus service appears, so other sessions are unaffected |
+| `wallpaper/org.vaela.background`, `src/background.cpp` | The *Vaela Workspace Backgrounds* Plasma wallpaper and its `org.vaela.background` QML module, which follows the plugin's `backgroundsChanged` signal and UPower's battery state |
 | `lookandfeel/org.vaela.desktop` | Plasma look-and-feel package with Vaela's colours and first-login panel layout |
 | `packaging/vaela-desktop.spec` | The RPM |
 

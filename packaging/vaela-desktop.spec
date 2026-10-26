@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        0.7.0
+Version:        1.0.0
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -45,6 +45,8 @@ Requires:       kinfocenter
 Requires:       layer-shell-qt
 Requires:       spectacle
 Requires:       qt6-qtdeclarative
+# Video backgrounds play through Qt Multimedia in plasmashell.
+Requires:       qt6-qtmultimedia
 Requires:       konsole
 Recommends:     dolphin
 Recommends:     plasma-nm
@@ -78,9 +80,20 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %{_datadir}/wayland-sessions/vaela.desktop
 %{_datadir}/vaela/
 %{_datadir}/plasma/look-and-feel/org.vaela.desktop/
+%{_datadir}/plasma/wallpapers/org.vaela.background/
+%{_libdir}/qt6/qml/org/vaela/
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Mon Oct 26 2026 Vaela contributors - 1.0.0-1
+- Give each workspace its own video or picture background, chosen in Vaela Settings
+  or from the workspace bar's menu, and crossfaded when you switch. Workspaces
+  without one keep the Plasma wallpaper, which comes back once none are set.
+- Background options: Fill, Fit or Stretch; mute and volume (sound plays from one
+  monitor); playback speed; dim; blur; crossfade length; pausing while windows
+  cover the screen and on battery. Videos carry on where they left off.
+- Script backgrounds over D-Bus: org.vaela.Shell.setBackground(workspace, url).
+
 * Mon Oct 26 2026 Vaela contributors - 0.7.0-1
 - Choose the monitors Vaela runs on in Settings: the primary one (the default, and
   it follows Plasma's primary monitor), all of them, or a chosen set. The layout

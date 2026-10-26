@@ -15,6 +15,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QFile>
+#include <QMimeDatabase>
 #include <QDebug>
 #include <QDesktopServices>
 #include <QTimer>
@@ -38,12 +39,14 @@ class Bridge : public QObject {
     Q_PROPERTY(QVariantMap bindings READ bindings NOTIFY changed)
     Q_PROPERTY(int radialDelay READ radialDelay NOTIFY changed)
     Q_PROPERTY(QString monitors READ monitors NOTIFY changed)
+    Q_PROPERTY(QVariantMap background READ background NOTIFY changed)
     // The monitors that get a layout switch and a workspace bar, by name.
     Q_PROPERTY(QStringList screens READ screens NOTIFY screensChanged)
     QVariantMap data;
     QStringList screenNames;
     KSharedConfig::Ptr config=KSharedConfig::openConfig("vaelarc");
     bool pending=false, migrationAttempted=false;
+    int backgroundCount=-1;
 public:
     QVariantMap state() const {return data;}
     bool gestures() const {return KConfigGroup(config,"General").readEntry("Gestures",true);}
@@ -51,6 +54,59 @@ public:
     int gap() const {return KConfigGroup(config,"General").readEntry("Gap",8);}
     int radialDelay() const {return std::clamp(KConfigGroup(config,"General").readEntry("RadialDelay",500),150,2000);}
     QString monitors() const {return KConfigGroup(config,"General").readEntry("Monitors",QStringLiteral("primary"));}
+    // Playback settings for workspace backgrounds, with their defaults.
+    QVariantMap background() const {
+        const KConfigGroup general(config,"General");
+        return {{"fill",general.readEntry("BackgroundFill",QStringLiteral("fill"))},{"muted",general.readEntry("BackgroundMuted",true)},
+                {"volume",general.readEntry("BackgroundVolume",50)},{"speed",general.readEntry("BackgroundSpeed",100)},
+                {"dim",general.readEntry("BackgroundDim",0)},{"blur",general.readEntry("BackgroundBlur",0)},
+                {"transition",general.readEntry("BackgroundTransition",600)},{"pauseCovered",general.readEntry("PauseWhenCovered",true)},
+                {"pauseOnBattery",general.readEntry("PauseOnBattery",true)}};
+    }
+    // "video", "image" or "" for a background's address, to pick how to preview it.
+    Q_INVOKABLE QString mediaKind(const QString &url) const {
+        if(url.isEmpty()) return {};
+        static const QMimeDatabase mimes;
+        const auto mime=mimes.mimeTypeForUrl(QUrl(url));
+        return mime.name().startsWith("video/") || mime.inherits("video/x-matroska") ? QStringLiteral("video") : QStringLiteral("image");
+    }
+    // url "" removes the workspace's background. Plasma's desktops use the Vaela wallpaper while
+    // any workspace has one; refresh() hands them back once the last one goes.
+    Q_INVOKABLE void setBackground(int desktop,const QString &url) {
+        call("setBackground",{desktop,url});
+        if(!url.isEmpty()) useVaelaWallpaper(true);
+    }
+    Q_INVOKABLE void setBackgroundEverywhere(const QString &url) {
+        for(const auto &d:data.value("desktops").toList()) call("setBackground",{d.toMap().value("id").toInt(),url});
+        useVaelaWallpaper(true);
+    }
+    // Switches every Plasma desktop to the Vaela wallpaper, keeping its picture for workspaces
+    // without a background, or back to the wallpaper it had.
+    void useVaelaWallpaper(bool use) {
+        static const QString script=QStringLiteral(R"(
+const use = %1;
+for (const d of desktops()) {
+    if (use && d.wallpaperPlugin !== "org.vaela.background") {
+        const previous = d.wallpaperPlugin;
+        let picture = "";
+        if (previous === "org.kde.image") {
+            d.currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
+            picture = d.readConfig("Image", "");
+        }
+        d.currentConfigGroup = ["Wallpaper", "org.vaela.background", "General"];
+        d.writeConfig("Previous", previous);
+        d.writeConfig("Fallback", picture);
+        d.wallpaperPlugin = "org.vaela.background";
+    } else if (!use && d.wallpaperPlugin === "org.vaela.background") {
+        d.currentConfigGroup = ["Wallpaper", "org.vaela.background", "General"];
+        d.wallpaperPlugin = d.readConfig("Previous", "org.kde.image") || "org.kde.image";
+    }
+}
+)");
+        auto message=QDBusMessage::createMethodCall("org.kde.plasmashell","/PlasmaShell","org.kde.PlasmaShell","evaluateScript");
+        message << script.arg(use ? "true" : "false");
+        QDBusConnection::sessionBus().asyncCall(message);
+    }
     QStringList screens() const {return screenNames;}
     static QScreen *screenNamed(const QString &name) {
         for(auto screen:QGuiApplication::screens()) if(screen->name()==name) return screen;
@@ -84,11 +140,12 @@ public:
     Q_INVOKABLE void call(QString method,QVariantList args={}) {
         auto message=QDBusMessage::createMethodCall("org.vaela.Controller","/Controller","org.vaela.Controller",method);
         // JavaScript numbers arrive as doubles; these D-Bus methods require an int.
-        if(QStringList{"desktop","renameDesktop","removeDesktop"}.contains(method) && !args.isEmpty()) args[0]=args[0].toInt();
+        if(QStringList{"desktop","renameDesktop","removeDesktop","setBackground"}.contains(method) && !args.isEmpty()) args[0]=args[0].toInt();
         message.setArguments(args);QDBusConnection::sessionBus().asyncCall(message);
     }
     Q_INVOKABLE void setting(QString key,QVariant value) {
-        if(!QStringList{"Gestures","Threshold","Gap","Dark","RadialDelay","Monitors"}.contains(key)) return;
+        if(!QStringList{"Gestures","Threshold","Gap","Dark","RadialDelay","Monitors","BackgroundFill","BackgroundMuted","BackgroundVolume",
+                        "BackgroundSpeed","BackgroundDim","BackgroundBlur","BackgroundTransition","PauseWhenCovered","PauseOnBattery"}.contains(key)) return;
         KConfigGroup(config,"General").writeEntry(key,value);config->sync();call("reload");emit changed();
     }
     Q_INVOKABLE void launch(QString name) {
@@ -151,6 +208,11 @@ public Q_SLOTS:
             const auto next=reply.isError()?QVariantMap{}:QJsonDocument::fromJson(reply.value().toUtf8()).object().toVariantMap();
             if(next!=data){data=next;emit changed();}
             updateScreens();
+            if(!data.isEmpty()) {
+                const int count=data.value("backgrounds").toInt();
+                if(count==0 && backgroundCount>0) useVaelaWallpaper(false);
+                backgroundCount=count;
+            }
             if(!migrationAttempted && !data.isEmpty()) {
                 migrationAttempted=true;
                 QFile script((qEnvironmentVariableIsSet("VAELA_QML")?qEnvironmentVariable("VAELA_QML"):QStringLiteral(VAELA_QML_PATH)).replace("Main.qml","migrate-layout.js"));
@@ -178,6 +240,8 @@ public:
 public Q_SLOTS:
     void showView(const QString &view,int x,int y) {bridge->showView(view,x,y);}
     void shortcutChanged(const QString &id,const QString &keys,const QString &clash) {bridge->shortcutChanged(id,keys,clash);}
+    // Scriptable too: qdbus org.vaela.Shell /Shell setBackground 2 file:///path/video.webm
+    void setBackground(int desktop,const QString &url) {bridge->setBackground(desktop,url);}
 };
 int main(int argc,char**argv) {
     QGuiApplication app(argc,argv);
