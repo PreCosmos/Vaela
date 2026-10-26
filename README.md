@@ -1,118 +1,228 @@
 # Vaela
 
-A Wayland desktop inspired by Vivaldi, built on KWin and Plasma. Select **Vaela**
-on the login screen. Vaela uses Plasma's services and system settings pages.
+A Wayland desktop that works like the Vivaldi browser: mouse gestures, a radial
+menu on a right-click hold, workspaces as vertical tabs, and per-workspace window
+layouts that float, tile or scroll. Vaela runs on KDE's KWin and reuses Plasma's
+panels, services and settings, and appears as its own **Vaela** session on the
+login screen.
 
-## Desktop controls
+<p align="center">
+  <img src="docs/screenshots/radial-menu.png" width="360" alt="The radial menu with the Terminal item hovered">
+  <img src="docs/screenshots/workspace-bar.png" width="230" alt="The workspace bar with three workspaces">
+</p>
+<p align="center">
+  <img src="docs/screenshots/settings.png" width="440" alt="Vaela Settings">
+  <img src="docs/screenshots/quick-commands.png" width="390" alt="Quick Commands">
+</p>
 
-- The layout switch selects **Float**, **Auto Tiling** (a grid), or
-  **Scrollable** (horizontal, full-height columns). It stays hidden as a thin handle at the
-  right end of the top bar and opens when the pointer reaches the top-right corner.
-  The choice is saved independently per workspace in each activity.
-  Drag a window edge to resize: Scrollable keeps an independent column width;
-  Auto Tiling shares the new column/row boundary with neighbouring windows.
-  Neighbouring tiles reflow during the drag. Scrollable neighbours keep their widths
-  and move to preserve gaps. In Scrollable the focused column always sits in the middle
-  of the screen, so new windows open centred, and each application's column width is
-  remembered after its window closes. Auto Tiling sizes last while the window is open.
-  Float restores window geometry saved before automatic arrangement. Layouts exclude
-  dialogs, panels, pinned windows, minimized windows and fullscreen applications.
-- The right-edge workspace bar reveals vertical tabs on hover, with each workspace’s layout. Click to switch;
-  use **+ Workspace** to add and **⋮** to rename or remove. Hover for window titles.
-- **F2** opens Quick Commands. Type to filter, use arrows and Enter to execute.
-- Hold right-click still: the context menu appears at **0.25 seconds**, hides at
-  **0.75 seconds**, and the radial menu appears at **1 second**. Keep holding and move
-  onto an item: it grows and the centre reads "Release to open". Release the right
-  button to open it. Releasing over the centre keeps the menu open, so you can also
-  pick an item with a left click. Escape cancels.
-- Right-drag draws gestures. Short clicks retain application context menus;
-  **Shift + right-click** bypasses gesture interception.
-- **Meta+Ctrl+S** opens Vaela Settings: layouts, spacing, gesture sensitivity,
-  gesture bindings and links to Plasma's settings and shortcut editor.
+## Features
 
-| Gesture | Default action |
+- **Three window layouts per workspace.** *Float* leaves windows where you put
+  them, *Auto Tiling* arranges them in a grid, and *Scrollable* puts them in a
+  horizontal strip of full-height columns with the focused one in the middle of
+  the screen. Each workspace in each activity remembers its own layout.
+- **Radial menu.** Hold the right mouse button for one second, move onto an item
+  and let go. Applications, shell commands and desktop actions, with your own
+  images.
+- **Mouse gestures.** Draw with the right button to switch workspaces, close or
+  maximize windows, open Quick Commands and more. Every stroke can be rebound.
+- **Workspace bar.** Push the pointer against the right edge for your workspaces
+  as tabs, with each one's layout and window count.
+- **Layout switch.** Push the pointer into the top-right corner to change the
+  current workspace's layout.
+- **Quick Commands** (F2) and **Vaela Settings** (Meta+Ctrl+S), with direct links
+  to Plasma's pages for displays and HDR, sound, printers, power, keyboard,
+  mouse, shortcuts and system information.
+
+## Requirements
+
+- Fedora 45 or a Fedora Atomic image based on it (Bazzite, Kinoite, Silverblue), x86_64.
+- **KWin 6.7.5.** Vaela's KWin plugin uses KWin's internal interfaces, so each
+  Vaela build works only with the KWin version it was compiled against. The RPM
+  requires that exact version; after a KWin update, rebuild Vaela.
+
+## Installing
+
+Build the RPM (see [Building](#building)) or download one from the releases page, then:
+
+**Fedora Atomic (Bazzite, Kinoite, Silverblue)**
+
+```bash
+rpm-ostree install ./vaela-desktop-0.5.0-1.fc45.x86_64.rpm
+```
+
+Replacing an earlier local build (including the old `vela-desktop` package):
+
+```bash
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-0.5.0-1.fc45.x86_64.rpm
+```
+
+**Fedora Workstation**
+
+```bash
+sudo dnf install ./vaela-desktop-0.5.0-1.fc45.x86_64.rpm
+```
+
+Reboot (Atomic) or log out (Workstation), then choose **Vaela** in the session
+menu of the login screen. Installing pulls in KWin and the parts of Plasma that
+Vaela uses; GNOME or Plasma sessions you already have stay available.
+
+To remove it: `rpm-ostree uninstall vaela-desktop`, or `sudo dnf remove vaela-desktop`.
+
+## Using Vaela
+
+### Layouts
+
+Push the pointer into the **top-right corner** of the screen. A thin coral handle
+there expands into the layout switch: **Float**, **Auto Tiling** or **Scrollable**.
+The magnifier opens Quick Commands and the gear opens Vaela Settings.
+
+- **Auto Tiling:** drag a window edge to resize; neighbours share the new boundary.
+- **Scrollable:** the focused column sits in the middle of the screen, so new
+  windows open centred. Drag a column's edge to change its width; Vaela remembers
+  each application's width for the next time it opens.
+- **Float:** windows go back to where they were before Vaela arranged them.
+
+Dialogs, pinned, minimized and fullscreen windows are never arranged.
+
+### Workspaces
+
+Push the pointer against the **right edge**. Click a tab to switch, use **⋮** to
+rename or remove a workspace, and **New workspace** to add one. Hover a tab to see
+its window titles. The gestures → ↑ and ← ↑ send the window under the stroke to the
+next or previous workspace.
+
+### Radial menu
+
+Hold the **right mouse button** without moving:
+
+| Held for | What happens |
 |---|---|
-| Left / Right | Previous / next workspace |
-| Up / Down | Maximize or restore / close the hovered window |
-| Down, Right | Close the window under the initial press |
-| Up, Down | Cycle layout |
-| Down, Up | Terminal |
-| Up, Left / Up, Right | Activities / Quick Commands |
-| Right, Up / Left, Up | Move window to next / previous workspace |
+| 0.25 s | The application's own context menu opens |
+| 0.75 s | The context menu closes again |
+| 1 s | The radial menu opens around the pointer |
 
-**Meta+Ctrl+Space** cycles layouts; **Meta+Ctrl+R** opens the radial menu.
-**Meta+Left/Right** focuses the window to the left/right in Scrollable and centres it;
-it takes priority over Plasma's quick tiling only in Scrollable mode.
-**Meta+Alt+Left/Right** focuses the previous/next window in any layout.
-**Meta+Plus/Minus** widens/narrows the active column in Scrollable and Auto Tiling.
-These keys take priority over Plasma zoom while those layout modes are active.
-**Ctrl+Meta+Left/Right** moves the active Scrollable column left/right in the strip.
-It takes priority over Plasma workspace switching only in Scrollable mode.
-**Meta+Ctrl+Alt+Left/Right** also narrows/widens columns; **Meta+Ctrl+Alt+Up/Down**
-shrinks/grows tiled rows. Scrollable columns always use the available height.
-Bindings, settings and remembered column widths live in `~/.config/vaelarc`. The workspace bar currently
-uses title previews; workspace stacks and live thumbnails remain future work.
+Keep holding, move onto an item (it grows and the centre reads *Release to open*)
+and release the button. Releasing over the centre keeps the menu open so you can
+pick an item with a left click instead. **Escape** closes it. **Meta+Ctrl+R** opens
+it from the keyboard.
 
-## Customizing the radial menu
+### Mouse gestures
 
-Open **Vaela Settings → Customize Radial Menu…**, or click the gear at the bottom
-of the radial menu. Choose **Add Application** to search installed applications;
-the application name and icon are filled in automatically. Choose **Add Command**
-to enter a name and shell command, with an optional **Run in a terminal** setting.
+Hold the right button and draw. A quick right-click still opens context menus,
+and **Shift+right-click** skips Vaela entirely.
 
-Every item has an image. Use **Edit** to choose a system icon or **Choose Image…**
-for a local PNG, JPEG, SVG, WebP or BMP. Vaela copies imported images into
-`~/.local/share/vaela-shell/radial-icons/`, so deleting the original image does not
-break your menu. **Remove** deletes an application, command or desktop action
-from the menu without uninstalling anything. The arrow buttons change the order.
-Changes save immediately in the `[RadialMenu]` group of `~/.config/vaelarc`.
-Menus with more than eight entries have additional pages; an empty menu keeps
-its gear button so you can add entries again.
+| Stroke | Default action |
+|---|---|
+| ← / → | Previous / next workspace |
+| ↑ | Maximize or restore the window |
+| ↓ | Close the window under the stroke |
+| ↓ → | Close the window |
+| ↑ ↓ | Cycle the layout |
+| ↓ ↑ | New terminal |
+| ↑ ← | Activities |
+| ↑ → | Quick Commands |
+| → ↑ / ← ↑ | Send the window to the next / previous workspace |
 
-The editor takes inspiration from [Kando](https://kando.menu/creating-menus/).
+### Keyboard
 
-## Developing
+| Keys | Action |
+|---|---|
+| F2 | Quick Commands |
+| Meta+Ctrl+S | Vaela Settings |
+| Meta+Ctrl+R | Radial menu |
+| Meta+Ctrl+Space | Cycle the layout |
+| Meta+← / → | Focus the window to the left / right (Scrollable) |
+| Meta+Alt+← / → | Focus the previous / next window |
+| Ctrl+Meta+← / → | Move the column left / right (Scrollable) |
+| Meta+Plus / Minus | Widen / narrow the active column |
+| Meta+Ctrl+Alt+arrows | Resize columns and rows |
+
+In Scrollable and Auto Tiling, Vaela's keys take priority over Plasma's quick
+tiling, zoom and workspace keys that use the same combinations. Everything else
+can be changed in Plasma's shortcut settings (Vaela Settings → *Edit keyboard
+shortcuts…*).
+
+## Customizing
+
+Open **Vaela Settings** (Meta+Ctrl+S, the gear in the layout switch, or the
+radial menu) to set the gap between windows, turn gestures on or off, change the
+stroke length and rebind every gesture.
+
+**Customize radial menu…** edits the radial menu:
+
+- **Add Application** lists installed applications; the name and icon are filled in.
+- **Add Command** runs any shell command, optionally in a terminal.
+- **Edit** changes the name, command or image. Pick a system icon or your own PNG,
+  JPEG, SVG, WebP or BMP; Vaela copies it into `~/.local/share/vaela-shell/radial-icons/`.
+- The arrows reorder items and the bin removes one. Menus with more than eight
+  items get extra pages.
+
+Settings, gesture bindings, the radial menu and remembered column widths live in
+`~/.config/vaelarc`.
+
+## Building
+
+Everything builds in a Fedora 45 [distrobox](https://distrobox.it) named
+`vela-dev`, whose home is `.devbox/home` inside the checkout.
 
 ```bash
 ./scripts/dev-container.sh
-./scripts/run-nested.sh --fresh
+```
+
+Build the RPM into `rpms/`:
+
+```bash
 ./scripts/build-rpm.sh
 ```
 
-The Fedora 45 distrobox `vela-dev` holds build dependencies. Its home is
-`.devbox/home`. Native plugins must be rebuilt for each KWin version; RPMs depend
-on the exact KWin version used to build them. The KWin plugin only activates when
-`VAELA_SESSION=1`, which `startvaela` sets. The shell autostarts from
-`/etc/xdg/autostart` and exits unless the plugin's `org.vaela.Controller` D-Bus service
-appears, so other desktop sessions remain unaffected.
-
-`./scripts/test-headless.sh` builds and tests a private software-rendered KWin session.
-`ctest --test-dir build/native --output-on-failure` runs gesture tests after a
-CMake build. `tests/windows.cpp` is a compositor integration probe: run
-`vaela-window-test` inside an isolated Vaela KWin instance at 1280×800 to check
-actual window sizes through all three modes and restoration to Float.
-
-## Installing on Bazzite / Fedora Atomic
+Run Vaela in a window on your current desktop, with a throwaway home:
 
 ```bash
-rpm-ostree install ./rpms/vaela-desktop-0.5.0-1.fc45.x86_64.rpm
+./scripts/run-nested.sh --fresh
 ```
 
-To replace an already layered local RPM (including the old `vela-desktop`), use:
+Run the tests, including a private software-rendered KWin session:
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./rpms/vaela-desktop-0.5.0-1.fc45.x86_64.rpm
+./scripts/test-headless.sh
 ```
 
-Reboot and select **Vaela** at login. Remove with `rpm-ostree uninstall vaela-desktop`.
-On first login `startvaela` copies `~/.config/velarc` to `vaelarc` and switches the
-look-and-feel from `org.vela.desktop` to `org.vaela.desktop`. The shell upgrades the
-stock panel shapes of earlier versions: it removes the old pager and gives the top bar
-its full width back. Other panel configurations are left as configured.
+## How it works
 
-## Source layout
+| Part | What it does |
+|---|---|
+| `session/startvaela` | Starts Plasma's Wayland session with Vaela's defaults (`/usr/share/vaela/xdg`) layered under your own `~/.config`, and carries settings over from the pre-0.5 "Vela" names |
+| `src/plugin.cpp` | KWin plugin: gestures, the right-click hold, layouts, shortcuts, and the `org.vaela.Controller` D-Bus service. It is active only when `VAELA_SESSION=1`, which `startvaela` sets |
+| `src/shell.cpp`, `src/*.qml` | `vaela-shell`: the layout switch, workspace bar, radial menu, Quick Commands and Settings, as layer-shell surfaces. It autostarts from `/etc/xdg/autostart` and exits unless the plugin's D-Bus service appears, so other sessions are unaffected |
+| `lookandfeel/org.vaela.desktop` | Plasma look-and-feel package with Vaela's colours and first-login panel layout |
+| `packaging/vaela-desktop.spec` | The RPM |
 
-`src/` contains the native KWin plugin and Qt Quick shell. `session/` contains the
-session launcher, autostart entry and panel upgrade. `config/xdg/` and
-`lookandfeel/` provide session defaults. `packaging/` contains the RPM spec;
-`scripts/` contains development tools. `docs/mockup/` is the original HTML reference.
+## Known limitations
+
+- Each build is tied to one KWin version and has to be rebuilt after KWin updates.
+- The workspace bar shows window titles; live thumbnails and workspace stacks are
+  not done yet.
+- On a Fedora Atomic system rebased from a GNOME image, the new image's system
+  accounts may lack `/etc/shadow` entries, which stops Plasma's login manager.
+  This comes from the rebase, not from Vaela.
+
+## License
+
+Vaela is free software under the **GNU General Public License, version 2 or (at
+your option) any later version** ([`LICENSES/GPL-2.0-or-later.txt`](LICENSES/GPL-2.0-or-later.txt)).
+The KWin plugin is built against KWin's own GPL-2.0-or-later code, so Vaela must
+be distributed under a GPL-compatible licence; GPL-2.0-or-later matches KWin and
+keeps Vaela compatible with Qt's LGPL-3.0. Licensing follows the
+[REUSE](https://reuse.software) conventions: source files carry SPDX headers and
+`REUSE.toml` covers the rest.
+
+Vaela is an independent project. It is not affiliated with or endorsed by
+Vivaldi Technologies, KDE e.V. or Universal Blue. Vivaldi, KDE and Plasma are
+trademarks of their respective owners.
+
+## Credits
+
+- [KDE Plasma and KWin](https://kde.org/plasma-desktop/), which Vaela builds on.
+- [Vivaldi](https://vivaldi.com), whose gestures and tab bar inspired the design.
+- [Kando](https://kando.menu), whose menu editor inspired the radial menu editor.

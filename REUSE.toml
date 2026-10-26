@@ -1,0 +1,11 @@
+version = 1
+SPDX-PackageName = "Vaela"
+SPDX-PackageDownloadLocation = "https://github.com/"
+
+# Everything in this repository is GPL-2.0-or-later. Files with their own
+# SPDX header keep it; this covers the ones that cannot carry a comment.
+[[annotations]]
+path = "**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Vaela contributors"
+SPDX-License-Identifier = "GPL-2.0-or-later"
