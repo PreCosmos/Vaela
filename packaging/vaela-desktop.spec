@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        0.6.0
+Version:        0.7.0
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -81,6 +81,18 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Mon Oct 26 2026 Vaela contributors - 0.7.0-1
+- Choose the monitors Vaela runs on in Settings: the primary one (the default, and
+  it follows Plasma's primary monitor), all of them, or a chosen set. The layout
+  switch and workspace bar appear on each, and other monitors keep plain Plasma
+  behaviour. Fixes Vaela appearing on the left monitor instead of the primary one.
+- Open Quick Commands, Settings and the keyboard radial menu on the active monitor.
+- Edit every Vaela shortcut in Settings, including the layout keys (Meta+arrows,
+  Meta+Plus/Minus, Meta+Ctrl+arrows), with conflict checks and reset to default.
+- Set how long to hold the right button before the radial menu opens.
+- Move the radial menu shortcut from Meta+Ctrl+R, which Spectacle uses for window
+  recording, to Meta+Ctrl+M.
+
 * Mon Oct 26 2026 Vaela contributors - 0.6.0-1
 - Build for Fedora 44 as well as Fedora 45.
 - Open the radial menu after a half-second hold. A quick right-click opens the

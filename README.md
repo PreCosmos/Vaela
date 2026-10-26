@@ -21,8 +21,8 @@ login screen.
   them, *Auto Tiling* arranges them in a grid, and *Scrollable* puts them in a
   horizontal strip of full-height columns with the focused one in the middle of
   the screen. Each workspace in each activity remembers its own layout.
-- **Radial menu.** Hold the right mouse button for half a second, move onto an item
-  and let go. Applications, shell commands and desktop actions, with your own
+- **Radial menu.** Hold the right mouse button (half a second by default), move onto
+  an item and let go. Applications, shell commands and desktop actions, with your own
   images.
 - **Mouse gestures.** Draw with the right button to switch workspaces, close or
   maximize windows, open Quick Commands and more. Every stroke can be rebound.
@@ -33,6 +33,9 @@ login screen.
 - **Quick Commands** (F2) and **Vaela Settings** (Meta+Ctrl+S), with direct links
   to Plasma's pages for displays and HDR, sound, printers, power, keyboard,
   mouse, shortcuts and system information.
+- **Multiple monitors.** Run Vaela on the primary monitor, on all of them, or on
+  the ones you pick; the others behave like plain Plasma.
+- **Your own shortcuts.** Every Vaela key can be changed in Settings.
 
 ## Requirements
 
@@ -51,19 +54,19 @@ Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 4
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 
 ```bash
-rpm-ostree install ./vaela-desktop-0.6.0-1.fc45.x86_64.rpm
+rpm-ostree install ./vaela-desktop-0.7.0-1.fc45.x86_64.rpm
 ```
 
 Replacing an earlier local build (including the old `vela-desktop` package):
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./vaela-desktop-0.6.0-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-0.7.0-1.fc45.x86_64.rpm
 ```
 
 **Fedora Workstation**
 
 ```bash
-sudo dnf install ./vaela-desktop-0.6.0-1.fc45.x86_64.rpm
+sudo dnf install ./vaela-desktop-0.7.0-1.fc45.x86_64.rpm
 ```
 
 Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so
@@ -101,13 +104,13 @@ next or previous workspace.
 
 ### Radial menu
 
-Hold the **right mouse button** still for **half a second** and the radial menu
-opens around the pointer. A quicker right-click opens the application's own context
+Hold the **right mouse button** still for **half a second** (adjustable in Vaela
+Settings, from 0.15 to 2 seconds) and the radial menu opens around the pointer. A quicker right-click opens the application's own context
 menu as usual, when you release the button.
 
 Keep holding, move onto an item (it grows and the centre reads *Release to open*)
 and release the button. Releasing over the centre keeps the menu open so you can
-pick an item with a left click instead. **Escape** closes it. **Meta+Ctrl+R** opens
+pick an item with a left click instead. **Escape** closes it. **Meta+Ctrl+M** opens
 it from the keyboard.
 
 ### Mouse gestures
@@ -133,7 +136,7 @@ and **Shift+right-click** skips Vaela entirely.
 |---|---|
 | F2 | Quick Commands |
 | Meta+Ctrl+S | Vaela Settings |
-| Meta+Ctrl+R | Radial menu |
+| Meta+Ctrl+M | Radial menu |
 | Meta+Ctrl+Space | Cycle the layout |
 | Meta+← / → | Focus the window to the left / right (Scrollable) |
 | Meta+Alt+← / → | Focus the previous / next window |
@@ -141,16 +144,35 @@ and **Shift+right-click** skips Vaela entirely.
 | Meta+Plus / Minus | Widen / narrow the active column |
 | Meta+Ctrl+Alt+arrows | Resize columns and rows |
 
-In Scrollable and Auto Tiling, Vaela's keys take priority over Plasma's quick
-tiling, zoom and workspace keys that use the same combinations. Everything else
-can be changed in Plasma's shortcut settings (Vaela Settings → *Edit keyboard
-shortcuts…*).
+In Scrollable and Auto Tiling, Vaela's layout keys (Meta+arrows, Meta+Plus/Minus
+and Ctrl+Meta+arrows) take priority over Plasma's quick tiling, zoom and workspace
+keys that use the same combinations.
+
+Every key in the table can be changed under **Keyboard shortcuts** in Vaela
+Settings: click a shortcut and press the new keys (**Esc** cancels, **Backspace**
+removes it). If another application or Vaela action already uses them, Vaela says
+which and asks before taking them over; the arrow button next to a changed
+shortcut puts the default back. The global ones also show up in Plasma's
+shortcut settings under *Vaela*.
+
+### Multiple monitors
+
+By default Vaela runs on the **primary monitor**, the one with priority 1 in
+System Settings → Display & Monitor, and moves with it when you change which one that is. Under
+**Monitors** in Vaela Settings you can pick **All monitors** or **Chosen
+monitors** and switch each one on or off.
+
+On each of those monitors you get the layout switch, the workspace bar, mouse
+gestures and the radial menu, and windows follow the workspace's layout. On the
+others windows float and right-click works as in plain Plasma. Quick Commands and
+Settings open on the monitor you are using, if Vaela runs there.
 
 ## Customizing
 
 Open **Vaela Settings** (Meta+Ctrl+S, the gear in the layout switch, or the
 radial menu) to set the gap between windows, turn gestures on or off, change the
-stroke length and rebind every gesture.
+stroke length and the radial menu's hold time, rebind every gesture and keyboard
+shortcut, and choose the monitors Vaela runs on.
 
 **Customize radial menu…** edits the radial menu:
 
@@ -161,8 +183,9 @@ stroke length and rebind every gesture.
 - The arrows reorder items and the bin removes one. Menus with more than eight
   items get extra pages.
 
-Settings, gesture bindings, the radial menu and remembered column widths live in
-`~/.config/vaelarc`.
+Settings, gesture bindings, layout keys, the radial menu and remembered column
+widths live in `~/.config/vaelarc`; the global shortcuts live with Plasma's, in
+`~/.config/kglobalshortcutsrc`.
 
 ## Building
 

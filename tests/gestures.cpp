@@ -24,6 +24,17 @@ private Q_SLOTS:
         QCOMPARE(QKeySequence("Meta+-")[0].key(),Qt::Key_Minus);
         QCOMPARE(QKeySequence("Ctrl+Meta+Left")[0].keyboardModifiers(),Qt::KeyboardModifiers(Qt::ControlModifier|Qt::MetaModifier));
     }
+    void customShortcuts() {
+        const QHash<QString,QString> custom{{"focus-next","Meta+L"},{"widen","none"},{"column-left","Alt+Shift+Left"}};
+        QCOMPARE(columnShortcut(Qt::Key_L,Qt::MetaModifier,false,true,custom),QString("focus-next"));
+        QVERIFY(columnShortcut(Qt::Key_Right,Qt::MetaModifier,false,true,custom).isEmpty());
+        QVERIFY(columnShortcut(Qt::Key_Plus,Qt::MetaModifier,true,false,custom).isEmpty());
+        QCOMPARE(columnShortcut(Qt::Key_Minus,Qt::MetaModifier,true,false,custom),QString("narrow"));
+        QCOMPARE(columnShortcut(Qt::Key_Left,Qt::AltModifier|Qt::ShiftModifier,false,true,custom),QString("column-left"));
+        QVERIFY(columnShortcut(Qt::Key_L,Qt::MetaModifier,true,false,custom).isEmpty());
+        // Recorded keys round-trip through the text Vaela stores.
+        QCOMPARE(QKeySequence(QKeySequence(QKeyCombination(Qt::MetaModifier|Qt::ControlModifier,Qt::Key_M)).toString(QKeySequence::PortableText)),QKeySequence("Meta+Ctrl+M"));
+    }
     void sharedBoundaryResize() {
         auto tracks=Layout::resize({600,600},0,800,120);
         QCOMPARE(tracks[0],800.);QCOMPARE(tracks[1],400.);

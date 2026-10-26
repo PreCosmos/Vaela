@@ -16,6 +16,7 @@
 #include <KConfigGroup>
 #include <KSharedConfig>
 #include <KGlobalAccel>
+#include <KGlobalShortcutInfo>
 #include <QAction>
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -27,6 +28,7 @@
 #include <QPointer>
 #include <QTimer>
 #include <algorithm>
+#include <utility>
 using namespace KWin;
 
 class Vaela : public Plugin, public InputEventFilter {
@@ -44,11 +46,30 @@ class Vaela : public Plugin, public InputEventFilter {
     QSet<Window *> resizing;
     QList<Window *> windowOrder;
     QHash<quint32,QString> capturedKeys;
+    QList<QAction *> globals;
+    QString recording; // the shortcut Vaela Settings waits to record from the next key press
     QString layoutKey(Window *w) const {
         return activity()+":"+VirtualDesktopManager::self()->currentDesktop()->id()+":"+QString::number(quintptr(w->output()),16);
     }
+    // The monitors Vaela runs on: "primary" (the default), "all", or a comma-separated list of
+    // output names. A list that names no connected monitor falls back to the primary one.
+    bool covers(LogicalOutput *output) const {
+        const auto order=workspace()->outputOrder();
+        if(!output || order.isEmpty()) return false;
+        const QString choice=KConfigGroup(config,"General").readEntry("Monitors",QStringLiteral("primary"));
+        if(choice=="all") return true;
+        const auto names=choice.split(',',Qt::SkipEmptyParts);
+        if(std::none_of(order.begin(),order.end(),[&](LogicalOutput *o){return names.contains(o->name());})) return output==order.first();
+        return names.contains(output->name());
+    }
+    // Where views opened from the keyboard appear: the active monitor, if Vaela runs there.
+    QPointF home() const {
+        auto output=workspace()->activeOutput();
+        if(!covers(output)) for(auto o:workspace()->outputOrder()) if(covers(o)) {output=o;break;}
+        return output ? output->geometryF().center() : QPointF();
+    }
     void rememberResize(Window *w, QSizeF requested = {}) {
-        if(!eligible(w) || mode()=="Float") return;
+        if(!eligible(w) || mode()=="Float" || !covers(w->output())) return;
         const QRectF area=workspace()->clientArea(MaximizeArea,w->output());
         if(!requested.isValid()) requested=w->frameGeometry().size();
         if(mode()=="Scrollable") {
@@ -84,9 +105,13 @@ class Vaela : public Plugin, public InputEventFilter {
         return group.readEntry(activity()+":"+desktop->id(),group.readEntry(activity(),QStringLiteral("Float")));
     }
     bool locked() const { return waylandServer() && waylandServer()->isScreenLocked(); }
+    void shell(const QString &method, const QVariantList &args) {
+        auto m=QDBusMessage::createMethodCall("org.vaela.Shell", "/Shell", "org.vaela.Shell", method);
+        m.setArguments(args); QDBusConnection::sessionBus().asyncCall(m);
+    }
     void ui(QString view, QPointF pos = {}) {
-        auto m=QDBusMessage::createMethodCall("org.vaela.Shell", "/Shell", "org.vaela.Shell", "showView");
-        m << view << int(pos.x()) << int(pos.y()); QDBusConnection::sessionBus().asyncCall(m);
+        if(pos.isNull()) pos=home();
+        shell("showView",{view,int(pos.x()),int(pos.y())});
     }
     void stopHold() {hold.stop();}
     void contextClick() {
@@ -94,11 +119,50 @@ class Vaela : public Plugin, public InputEventFilter {
         seat->notifyPointerButton(Qt::RightButton,PointerButtonState::Pressed);seat->notifyPointerFrame();
         seat->notifyPointerButton(Qt::RightButton,PointerButtonState::Released);seat->notifyPointerFrame();
     }
-    void shortcut(QString id, QString key, std::function<void()> fn) {
+    // oldDefault: a shortcut this action used to ship with; a saved copy of it moves to the new key.
+    void shortcut(QString id, QString key, std::function<void()> fn, QString oldDefault = {}) {
         auto a=new QAction(id,this); a->setObjectName(id); a->setProperty("componentName", "vaela");
         KGlobalAccel::self()->setDefaultShortcut(a,{QKeySequence(key)});
         KGlobalAccel::self()->setShortcut(a,{QKeySequence(key)});
+        if(!oldDefault.isEmpty() && KGlobalAccel::self()->shortcut(a)==QList<QKeySequence>{QKeySequence(oldDefault)})
+            KGlobalAccel::self()->setShortcut(a,{QKeySequence(key)},KGlobalAccel::NoAutoloading);
         connect(a,&QAction::triggered,this,[this,fn]{if(!locked()) fn();});
+        globals.append(a);
+    }
+    QAction *globalAction(const QString &id) const {
+        for(auto a:globals) if(a->objectName()==id) return a;
+        return nullptr;
+    }
+    static const LayoutKey *findLayoutKey(const QString &id) {
+        for(const auto &k:layoutKeys()) if(k.id==id) return &k;
+        return nullptr;
+    }
+    static QString keyText(const QList<QKeySequence> &keys) {return keys.isEmpty() ? QString() : keys.first().toString(QKeySequence::PortableText);}
+    QHash<QString,QString> customLayoutKeys() const {
+        QHash<QString,QString> custom; KConfigGroup group(config,"Shortcuts");
+        for(const auto &k:layoutKeys()) if(group.hasKey(k.id)) custom[k.id]=group.readEntry(k.id,k.keys);
+        return custom;
+    }
+    QString layoutKeyText(const LayoutKey &k) const {
+        const auto keys=KConfigGroup(config,"Shortcuts").readEntry(k.id,k.keys);
+        return keys=="none" ? QString() : keys;
+    }
+    // What else answers to keys: another Vaela shortcut, or for global ones another application.
+    QString conflict(const QString &id, const QKeySequence &keys) const {
+        for(auto a:globals) if(a->objectName()!=id && KGlobalAccel::self()->shortcut(a).contains(keys)) return "Vaela: "+a->text();
+        for(const auto &k:layoutKeys()) if(k.id!=id && QKeySequence(layoutKeyText(k))==keys) return "Vaela: "+k.label;
+        // Layout keys take over Plasma's keys on purpose, and only while their layout is active.
+        if(findLayoutKey(id)) return {};
+        for(const auto &info:KGlobalAccel::globalShortcutsByKey(keys))
+            if(info.componentUniqueName()!="vaela") return info.componentFriendlyName()+": "+info.friendlyName();
+        return {};
+    }
+    void assign(const QString &id, const QKeySequence &keys) {
+        if(auto a=globalAction(id)) KGlobalAccel::self()->setShortcut(a,keys.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{keys},KGlobalAccel::NoAutoloading);
+        else if(findLayoutKey(id)) {KConfigGroup(config,"Shortcuts").writeEntry(id,keys.isEmpty() ? QStringLiteral("none") : keys.toString(QKeySequence::PortableText));config->sync();}
+    }
+    static bool modifierKey(Qt::Key key) {
+        return QList<Qt::Key>{Qt::Key_Shift,Qt::Key_Control,Qt::Key_Meta,Qt::Key_Alt,Qt::Key_AltGr,Qt::Key_Super_L,Qt::Key_Super_R,Qt::Key_Hyper_L,Qt::Key_Hyper_R}.contains(key);
     }
     void schedule() { if(!arranging) layoutTimer.start(); }
     bool appWindow(Window *w) const { return w && w->isNormalWindow() && !w->isSpecialWindow() && !w->isInternal() && !w->inherits("KWin::LayerShellV1Window") && w->resourceClass()!="vaela-shell"; }
@@ -135,6 +199,16 @@ class Vaela : public Plugin, public InputEventFilter {
         for(auto w:all) if(eligible(w)) groups[w->output()].append(w);
         for(auto it=groups.begin();it!=groups.end();++it) {
             const auto list=it.value();
+            // Monitors Vaela does not run on float; tiled windows moved there get their old size back.
+            if(!covers(it.key())) {
+                for(auto w:list) if(floating.contains(w) && !resizing.contains(w) && !w->isInteractiveMove()) {
+                    auto r=floating.take(w);
+                    // A window dragged over from a tiled monitor stays where it was dropped.
+                    if(!it.key()->geometryF().contains(r.center())) r.moveCenter(w->frameGeometry().center());
+                    w->moveResize(r);
+                }
+                continue;
+            }
             const QRectF area=workspace()->clientArea(MaximizeArea,it.key());
             const double gap=KConfigGroup(config,"General").readEntry("Gap",8);
             const bool scroll=mode()=="Scrollable";
@@ -173,10 +247,10 @@ public:
         input()->installInputEventFilter(this);
         QDBusConnection::sessionBus().registerService("org.vaela.Controller");
         QDBusConnection::sessionBus().registerObject("/Controller",this,QDBusConnection::ExportAllSlots);
-        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;target=nullptr;capturedKeys.clear();});
+        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;target=nullptr;capturedKeys.clear();recording.clear();});
         // A still right-button hold opens the radial menu; a quick click becomes the app's context click on release.
         hold.setTimerType(Qt::PreciseTimer);
-        hold.setSingleShot(true); hold.setInterval(500);
+        hold.setSingleShot(true);
         connect(&hold,&QTimer::timeout,this,[this]{if(down && !gesture.moved && !locked()) {radial=true;ui("radial",gesture.start);}});
         layoutTimer.setSingleShot(true); layoutTimer.setInterval(40);
         connect(&layoutTimer,&QTimer::timeout,this,&Vaela::arrange);
@@ -186,22 +260,35 @@ public:
         lastWindow=workspace()->activeWindow();
         connect(workspace(),&Workspace::currentDesktopChanged,this,[this]{schedule();});
         connect(workspace(),&Workspace::currentActivityChanged,this,[this]{schedule();});
+        connect(workspace(),&Workspace::outputOrderChanged,this,[this]{schedule();});
         for(auto w:workspace()->windows()) watch(w);
         shortcut("Quick Commands","F2",[this]{ui("commands");});
         shortcut("Vaela Settings","Meta+Ctrl+S",[this]{ui("settings");});
         shortcut("Cycle Vaela Layout","Meta+Ctrl+Space",[this]{action("cycle-layout");});
-        shortcut("Vaela Radial Menu","Meta+Ctrl+R",[this]{ui("radial");});
+        // Meta+Ctrl+R until 0.6, which Spectacle uses for window recording.
+        shortcut("Vaela Radial Menu","Meta+Ctrl+M",[this]{ui("radial");},"Meta+Ctrl+R");
         shortcut("Scroll to Previous Window","Meta+Alt+Left",[this]{action("focus-previous");});
+        shortcut("Scroll to Next Window","Meta+Alt+Right",[this]{action("focus-next");});
         shortcut("Widen Vaela Window","Meta+Ctrl+Alt+Right",[this]{action("widen");});
         shortcut("Narrow Vaela Window","Meta+Ctrl+Alt+Left",[this]{action("narrow");});
         shortcut("Grow Vaela Row","Meta+Ctrl+Alt+Down",[this]{action("taller");});
         shortcut("Shrink Vaela Row","Meta+Ctrl+Alt+Up",[this]{action("shorter");});
-        shortcut("Scroll to Next Window","Meta+Alt+Right",[this]{action("focus-next");});
     }
     bool keyboardKey(KeyboardKeyEvent *e) override {
         if(qEnvironmentVariable("VAELA_SESSION")!="1" || locked()) return false;
         if(e->state==KeyboardKeyState::Released) return capturedKeys.remove(e->nativeScanCode)>0;
-        const auto command=columnShortcut(e->key,e->modifiers,mode()=="Auto Tiling",mode()=="Scrollable");
+        // The same modifiers KWin matches global shortcuts with, so a recorded key works as one.
+        const auto modifiers=e->modifiersRelevantForGlobalShortcuts & ~Qt::KeypadModifier;
+        if(!recording.isEmpty() && !modifierKey(e->key)) {
+            const auto id=std::exchange(recording,QString());
+            capturedKeys[e->nativeScanCode]=id;
+            // Esc cancels and Backspace removes the shortcut, unless held with modifiers.
+            if(e->key==Qt::Key_Escape && !modifiers) shell("shortcutChanged",{id,QString(),QString()});
+            else setShortcut(id,e->key==Qt::Key_Backspace && !modifiers ? QString() : QKeySequence(QKeyCombination(modifiers,e->key)).toString(QKeySequence::PortableText),false);
+            return true;
+        }
+        if(!covers(workspace()->activeOutput())) return capturedKeys.contains(e->nativeScanCode);
+        const auto command=columnShortcut(e->key,modifiers,mode()=="Auto Tiling",mode()=="Scrollable",customLayoutKeys());
         if(command.isEmpty()) return capturedKeys.contains(e->nativeScanCode);
         // Run before KGlobalAccel: Plasma's zoom and workspace defaults share these keys.
         capturedKeys[e->nativeScanCode]=command;action(command);return true;
@@ -212,7 +299,8 @@ public:
         if(e->button!=Qt::RightButton) return false;
         if(e->state==PointerButtonState::Pressed) {
             config->reparseConfiguration();
-            if(!KConfigGroup(config,"General").readEntry("Gestures",true) || e->modifiers.testFlag(Qt::ShiftModifier)) return false;
+            if(!KConfigGroup(config,"General").readEntry("Gestures",true) || e->modifiers.testFlag(Qt::ShiftModifier)
+                || !covers(workspace()->outputAt(e->position))) return false;
             gesture.begin(e->position);down=true;radial=false;target=nullptr;
             auto stack=workspace()->stackingOrder();
             for(auto it=stack.crbegin();it!=stack.crend();++it) {
@@ -224,7 +312,7 @@ public:
                     break;
                 }
             }
-            hold.start();return true;
+            hold.start(std::clamp(KConfigGroup(config,"General").readEntry("RadialDelay",500),150,2000));return true;
         }
         if(!down) return false;
         down=false;stopHold();
@@ -261,12 +349,38 @@ public Q_SLOTS:
             for(auto w:windowOrder) if(appWindow(w) && w->isOnDesktop(d) && w->isOnCurrentActivity()) windows.append(w->caption());
             desks.append(QJsonObject{{"id",int(d->x11DesktopNumber())},{"name",d->name()},{"mode",mode(d)},{"current",d==VirtualDesktopManager::self()->currentDesktop()},{"windows",windows}});
         }
-        return QString::fromUtf8(QJsonDocument(QJsonObject{{"version",QStringLiteral(VAELA_VERSION)},{"mode",mode()},{"desktops",desks},{"activity",activity()}}).toJson(QJsonDocument::Compact));
+        QJsonArray outputs; const auto order=workspace()->outputOrder();
+        for(auto o:order) {
+            const auto label=(o->manufacturer()+" "+o->model()).trimmed();
+            outputs.append(QJsonObject{{"name",o->name()},{"label",label.isEmpty() ? o->name() : label},{"primary",o==order.first()},{"covered",covers(o)}});
+        }
+        QJsonArray keys;
+        for(auto a:globals) keys.append(QJsonObject{{"id",a->objectName()},{"label",a->text()},{"keys",keyText(KGlobalAccel::self()->shortcut(a))},{"default",keyText(KGlobalAccel::self()->defaultShortcut(a))}});
+        for(const auto &k:layoutKeys()) keys.append(QJsonObject{{"id",k.id},{"label",k.label},{"keys",layoutKeyText(k)},{"default",k.keys},{"layout",k.tiled ? "Auto Tiling and Scrollable" : "Scrollable"}});
+        return QString::fromUtf8(QJsonDocument(QJsonObject{{"version",QStringLiteral(VAELA_VERSION)},{"mode",mode()},{"desktops",desks},{"activity",activity()},
+                                                           {"outputs",outputs},{"shortcuts",keys}}).toJson(QJsonDocument::Compact));
     }
     void setMode(const QString &value) {
         if(locked() || !QStringList{"Float","Auto Tiling","Scrollable"}.contains(value)) return;
         KConfigGroup(config,"Layouts").writeEntry(activity()+":"+VirtualDesktopManager::self()->currentDesktop()->id(),value);config->sync();
         schedule();
+    }
+    // Vaela Settings: the next key press becomes this shortcut; "" stops waiting.
+    void recordShortcut(const QString &id) {recording=locked() || (!globalAction(id) && !findLayoutKey(id)) ? QString() : id;}
+    // keys "" removes the shortcut. Keys something else uses are only taken with replace; otherwise
+    // the shell hears who has them and can ask.
+    void setShortcut(const QString &id, const QString &keys, bool replace) {
+        if(locked() || (!globalAction(id) && !findLayoutKey(id))) return;
+        const QKeySequence sequence(keys);
+        const auto clash=sequence.isEmpty() ? QString() : conflict(id,sequence);
+        if(!clash.isEmpty() && !replace) {shell("shortcutChanged",{id,keys,clash});return;}
+        if(!clash.isEmpty()) {
+            for(auto a:globals) if(a->objectName()!=id && KGlobalAccel::self()->shortcut(a).contains(sequence)) assign(a->objectName(),{});
+            for(const auto &k:layoutKeys()) if(k.id!=id && QKeySequence(layoutKeyText(k))==sequence) assign(k.id,{});
+            if(!findLayoutKey(id)) KGlobalAccel::stealShortcutSystemwide(sequence);
+        }
+        assign(id,sequence);
+        shell("shortcutChanged",{id,keys,QString()});
     }
     void desktop(int id) {if(!locked()) VirtualDesktopManager::self()->setCurrent(id);}
     void addDesktop() {if(!locked()){auto m=VirtualDesktopManager::self();m->createVirtualDesktop(m->desktops().size(),"Workspace");m->save();}}
@@ -309,7 +423,7 @@ public Q_SLOTS:
                 QSizeF size=w->frameGeometry().size();
                 if(name=="widen" || name=="narrow") size.setWidth(std::max(120.,size.width()+(name=="widen"?80:-80)));
                 else size.setHeight(std::max(100.,size.height()+(name=="taller"?60:-60)));
-                if(mode()=="Float") {auto r=w->frameGeometry();r.setSize(size);w->moveResize(r);}
+                if(mode()=="Float" || !covers(w->output())) {auto r=w->frameGeometry();r.setSize(size);w->moveResize(r);}
                 else {rememberResize(w,size);saveWidth(w);schedule();}
             }
             if(name=="close") w->closeWindow();

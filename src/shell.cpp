@@ -36,7 +36,12 @@ class Bridge : public QObject {
     Q_PROPERTY(int threshold READ threshold NOTIFY changed)
     Q_PROPERTY(int gap READ gap NOTIFY changed)
     Q_PROPERTY(QVariantMap bindings READ bindings NOTIFY changed)
+    Q_PROPERTY(int radialDelay READ radialDelay NOTIFY changed)
+    Q_PROPERTY(QString monitors READ monitors NOTIFY changed)
+    // The monitors that get a layout switch and a workspace bar, by name.
+    Q_PROPERTY(QStringList screens READ screens NOTIFY screensChanged)
     QVariantMap data;
+    QStringList screenNames;
     KSharedConfig::Ptr config=KSharedConfig::openConfig("vaelarc");
     bool pending=false, migrationAttempted=false;
 public:
@@ -44,6 +49,23 @@ public:
     bool gestures() const {return KConfigGroup(config,"General").readEntry("Gestures",true);}
     int threshold() const {return KConfigGroup(config,"General").readEntry("Threshold",28);}
     int gap() const {return KConfigGroup(config,"General").readEntry("Gap",8);}
+    int radialDelay() const {return std::clamp(KConfigGroup(config,"General").readEntry("RadialDelay",500),150,2000);}
+    QString monitors() const {return KConfigGroup(config,"General").readEntry("Monitors",QStringLiteral("primary"));}
+    QStringList screens() const {return screenNames;}
+    static QScreen *screenNamed(const QString &name) {
+        for(auto screen:QGuiApplication::screens()) if(screen->name()==name) return screen;
+        return nullptr;
+    }
+    // The KWin plugin decides which monitors Vaela covers; a monitor Qt has not announced yet waits.
+    void updateScreens() {
+        if(data.isEmpty()) return;
+        QStringList next;
+        for(const auto &output:data.value("outputs").toList()) {
+            const auto name=output.toMap().value("name").toString();
+            if(output.toMap().value("covered").toBool() && screenNamed(name)) next.append(name);
+        }
+        if(next!=screenNames) {screenNames=next;emit screensChanged();}
+    }
     QVariantMap bindings() const {
         QVariantMap result{{"L","previous"},{"R","next"},{"U","maximize"},{"D","close"},{"DR","close"},{"UD","cycle-layout"},{"DU","terminal"},{"UL","activities"},{"UR","commands"},{"RU","send-next"},{"LU","send-previous"}};
         KConfigGroup group(config,"Bindings");
@@ -56,6 +78,8 @@ public:
     }
     Bridge() {
         auto timer=new QTimer(this); connect(timer,&QTimer::timeout,this,&Bridge::refresh);timer->start(350);refresh();
+        connect(qApp,&QGuiApplication::screenAdded,this,&Bridge::updateScreens);
+        connect(qApp,&QGuiApplication::screenRemoved,this,&Bridge::updateScreens);
     }
     Q_INVOKABLE void call(QString method,QVariantList args={}) {
         auto message=QDBusMessage::createMethodCall("org.vaela.Controller","/Controller","org.vaela.Controller",method);
@@ -64,7 +88,7 @@ public:
         message.setArguments(args);QDBusConnection::sessionBus().asyncCall(message);
     }
     Q_INVOKABLE void setting(QString key,QVariant value) {
-        if(!QStringList{"Gestures","Threshold","Gap","Dark"}.contains(key)) return;
+        if(!QStringList{"Gestures","Threshold","Gap","Dark","RadialDelay","Monitors"}.contains(key)) return;
         KConfigGroup(config,"General").writeEntry(key,value);config->sync();call("reload");emit changed();
     }
     Q_INVOKABLE void launch(QString name) {
@@ -81,9 +105,11 @@ public:
             QDBusConnection::sessionBus().asyncCall(message);
         }
     }
-    // Places a shell window; for overlays, returns the top-left corner it got in global coordinates.
-    Q_INVOKABLE QPoint layer(QQuickWindow *window, QString kind, int x=0,int y=0) {
+    // Places a shell window: the layout switch and workspace bar on the named monitor, overlays
+    // centred on x,y. For overlays, returns the top-left corner it got in global coordinates.
+    Q_INVOKABLE QPoint layer(QQuickWindow *window, QString kind, int x=0,int y=0, QString screen={}) {
         auto layer=LayerShellQt::Window::get(window);
+        if(auto target=screenNamed(screen)) {window->setScreen(target);layer->setScreen(target);}
         // The layout switch opens over Plasma's top bar, which already reserves the space.
         layer->setLayer(kind=="top" ? LayerShellQt::Window::LayerOverlay : LayerShellQt::Window::LayerTop);
         layer->setExclusiveZone(0);
@@ -113,6 +139,8 @@ public Q_SLOTS:
         if(QStringList{"terminal","files","browser","activities","screenshot"}.contains(view)) launch(view);
         else emit requested(view,x,y);
     }
+    // From the KWin plugin after recording or setting a shortcut; clash names who else has the keys.
+    void shortcutChanged(QString id,QString keys,QString clash) {emit shortcutResult(id,keys,clash);refresh();}
     void refresh() {
         if(pending) return;
         pending=true;
@@ -122,6 +150,7 @@ public Q_SLOTS:
             QDBusPendingReply<QString> reply=*watcher;pending=false;
             const auto next=reply.isError()?QVariantMap{}:QJsonDocument::fromJson(reply.value().toUtf8()).object().toVariantMap();
             if(next!=data){data=next;emit changed();}
+            updateScreens();
             if(!migrationAttempted && !data.isEmpty()) {
                 migrationAttempted=true;
                 QFile script((qEnvironmentVariableIsSet("VAELA_QML")?qEnvironmentVariable("VAELA_QML"):QStringLiteral(VAELA_QML_PATH)).replace("Main.qml","migrate-layout.js"));
@@ -137,6 +166,8 @@ public Q_SLOTS:
 Q_SIGNALS:
     void changed();
     void requested(QString view,int x,int y);
+    void shortcutResult(QString id,QString keys,QString clash);
+    void screensChanged();
 };
 class ShellAdaptor : public QDBusAbstractAdaptor {
     Q_OBJECT
@@ -146,6 +177,7 @@ public:
     explicit ShellAdaptor(Bridge *bridge) : QDBusAbstractAdaptor(bridge),bridge(bridge) {}
 public Q_SLOTS:
     void showView(const QString &view,int x,int y) {bridge->showView(view,x,y);}
+    void shortcutChanged(const QString &id,const QString &keys,const QString &clash) {bridge->shortcutChanged(id,keys,clash);}
 };
 int main(int argc,char**argv) {
     QGuiApplication app(argc,argv);

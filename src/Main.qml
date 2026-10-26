@@ -27,11 +27,8 @@ QtObject {
         {stroke:"L",arrows:"←"}, {stroke:"R",arrows:"→"}, {stroke:"U",arrows:"↑"}, {stroke:"D",arrows:"↓"},
         {stroke:"DR",arrows:"↓ →"}, {stroke:"UD",arrows:"↑ ↓"}, {stroke:"DU",arrows:"↓ ↑"}, {stroke:"UL",arrows:"↑ ←"},
         {stroke:"UR",arrows:"↑ →"}, {stroke:"RU",arrows:"→ ↑"}, {stroke:"LU",arrows:"← ↑"}]
-    readonly property var keys: [
-        ["F2","Quick Commands"], ["Meta+Ctrl+S","Vaela Settings"], ["Meta+Ctrl+R","Radial menu"],
-        ["Meta+Ctrl+Space","Cycle layout"], ["Meta+← / →","Focus the window to the left / right (Scrollable)"],
-        ["Meta+Alt+← / →","Focus previous / next window"], ["Ctrl+Meta+← / →","Move column left / right (Scrollable)"],
-        ["Meta+Plus / Minus","Widen / narrow the active column"], ["Meta+Ctrl+Alt+Arrows","Resize columns and rows"]]
+    readonly property var monitorChoices: [{label:"Primary monitor",value:"primary"}, {label:"All monitors",value:"all"}, {label:"Chosen monitors",value:"chosen"}]
+    readonly property string monitorChoice: vaela.monitors === "primary" || vaela.monitors === "all" ? vaela.monitors : "chosen"
     readonly property var systemPages: [
         {label:"Displays & HDR",icon:"preferences-desktop-display",page:"kcm_kscreen"}, {label:"Sound",icon:"preferences-desktop-sound",page:"kcm_pulseaudio"},
         {label:"Printers",icon:"printer",page:"kcm_printer_manager"}, {label:"Power",icon:"preferences-system-power-management",page:"kcm_powerdevilprofilesconfig"},
@@ -49,9 +46,20 @@ QtObject {
         p.light=Theme.surfacePressed; p.midlight=Theme.surfaceHover; p.mid=Theme.border; p.dark="#141519"; p.shadow="#000000"
         p.toolTipBase=Theme.surface; p.toolTipText=Theme.text
     }
+    function keyLabel(keys) {return keys ? keys.replace(/\+\+$/,"+Plus").replace(/\+-$/,"+Minus") : "None"}
+    // Monitor switches in Settings: turning one on or off moves to an explicit list, never an empty one.
+    function toggleMonitor(name,on) {
+        const outputs=vaela.state.outputs || []
+        let names=monitorChoice === "chosen" ? vaela.monitors.split(",").filter(n=>n) : outputs.filter(o=>o.covered).map(o=>o.name)
+        names=names.filter(n=>n !== name)
+        if(on) names.push(name)
+        if(outputs.some(o=>names.includes(o.name))) vaela.setting("Monitors",names.join(","))
+    }
+    // Opens a view in the middle of the overlay as last shown, so it stays on that monitor.
+    function reopen(view) {open(view,overlay.originX+overlay.width/2,overlay.originY+overlay.height/2)}
     function run(action) {
         overlay.hide()
-        if (action === "settings" || action === "commands") open(action,0,0)
+        if (action === "settings" || action === "commands") reopen(action)
         else if (action === "system") vaela.launch("system")
         else vaela.call("action",[action])
     }
@@ -79,7 +87,7 @@ QtObject {
         if(view === "radial-settings") radialEditor.page="menu"
         overlay.width=view === "radial" ? 440 : view === "commands" ? 600 : 680
         overlay.height=view === "radial" ? 440 : view === "commands" ? 520 : 660
-        let origin=vaela.layer(overlay,"overlay",x || Screen.width/2,y || Screen.height/2)
+        let origin=vaela.layer(overlay,"overlay",x,y)
         overlay.originX=origin.x; overlay.originY=origin.y
         overlay.show(); overlay.requestActivate()
         if(view === "commands") search.forceActiveFocus()
@@ -88,12 +96,17 @@ QtObject {
     property Connections radialEvents: Connections {
         target:radial
         function onEntriesChanged() {overlay.hot=-1;overlay.radialPage=Math.min(overlay.radialPage,Math.max(0,Math.ceil(radial.entries.length/8)-1))}
-        function onLaunchFailed() {root.open("radial-settings",0,0)}
+        function onLaunchFailed() {root.reopen("radial-settings")}
     }
     property Connections bridge: Connections {
         target: vaela
         function onRequested(view,x,y) {root.open(view,x,y)}
         function onChanged() { if(!vaela.state.mode) overlay.hide() }
+        function onShortcutResult(id,keys,clash) {
+            if(id !== overlay.recording && (!overlay.clash || id !== overlay.clash.id)) return
+            overlay.recording=""
+            overlay.clash=clash ? {id:id,keys:keys,by:clash} : null
+        }
     }
 
     // A rounded card with a title, used to group settings.
@@ -131,145 +144,156 @@ QtObject {
         Text {id: capText; anchors.centerIn: parent; color: Theme.text; font.pixelSize: 12; font.family: "monospace"}
     }
 
-    // Layout switch: a short handle on the top edge, set in from the right (see Bridge::layer) so it
-    // stays clear of a maximized window's close button, until the pointer reaches it.
-    property Window top: Window {
-        id: topWindow
-        property bool expanded:false
-        width: expanded ? switchPanel.implicitWidth + 8 : 160
-        height: expanded ? 38 : 6; color: "transparent"
-        visible: !!vaela.state.mode
-        flags: Qt.FramelessWindowHint
-        Component.onCompleted: {root.applyPalette(topWindow);vaela.layer(topWindow,"top")}
-        HoverHandler {
-            id:topHover
-            onHoveredChanged:if(hovered) {topCollapse.stop();topWindow.expanded=true} else topCollapse.restart()
-        }
-        Timer {id:topCollapse;interval:300;onTriggered:if(!topHover.hovered) topWindow.expanded=false}
-        Rectangle {
-            visible: !topWindow.expanded
-            anchors {top: parent.top; topMargin: 1; horizontalCenter: parent.horizontalCenter}
-            width: 56; height: 4; radius: 2; color: Theme.accent; opacity: 0.9
-        }
-        Rectangle {
-            id: switchPanel
-            visible: topWindow.expanded
-            anchors {right: parent.right; rightMargin: 4; top: parent.top; topMargin: 4}
-            implicitWidth: switchRow.implicitWidth + 8
-            width: implicitWidth; height: 30; radius: 10
-            color: Theme.panel; border.color: Theme.border
-            RowLayout {
-                id: switchRow
-                anchors.centerIn: parent; spacing: 2
-                Repeater {
-                    model: root.modes
-                    VButton {
-                        required property string modelData
-                        text: modelData; iconName: root.modeIcons[modelData]; flat: true; implicitHeight: 24
-                        active: vaela.state.mode === modelData
-                        onClicked: vaela.call("setMode",[modelData])
+    // Layout switch, on each monitor Vaela covers: a short handle on the top edge, set in from the right
+    // (see Bridge::layer) so it stays clear of a maximized window's close button, until the pointer reaches it.
+    property Instantiator tops: Instantiator {
+        model: vaela.screens
+        delegate: Window {
+            id: topWindow
+            required property string modelData
+            property bool expanded:false
+            // Shown only once placed: a layer surface keeps the monitor it is first shown on.
+            property bool placed:false
+            width: expanded ? switchPanel.implicitWidth + 8 : 160
+            height: expanded ? 38 : 6; color: "transparent"
+            visible: placed && !!vaela.state.mode
+            flags: Qt.FramelessWindowHint
+            Component.onCompleted: {root.applyPalette(topWindow);vaela.layer(topWindow,"top",0,0,modelData);placed=true}
+            HoverHandler {
+                id:topHover
+                onHoveredChanged:if(hovered) {topCollapse.stop();topWindow.expanded=true} else topCollapse.restart()
+            }
+            Timer {id:topCollapse;interval:300;onTriggered:if(!topHover.hovered) topWindow.expanded=false}
+            Rectangle {
+                visible: !topWindow.expanded
+                anchors {top: parent.top; topMargin: 1; horizontalCenter: parent.horizontalCenter}
+                width: 56; height: 4; radius: 2; color: Theme.accent; opacity: 0.9
+            }
+            Rectangle {
+                id: switchPanel
+                visible: topWindow.expanded
+                anchors {right: parent.right; rightMargin: 4; top: parent.top; topMargin: 4}
+                implicitWidth: switchRow.implicitWidth + 8
+                width: implicitWidth; height: 30; radius: 10
+                color: Theme.panel; border.color: Theme.border
+                RowLayout {
+                    id: switchRow
+                    anchors.centerIn: parent; spacing: 2
+                    Repeater {
+                        model: root.modes
+                        VButton {
+                            required property string modelData
+                            text: modelData; iconName: root.modeIcons[modelData]; flat: true; implicitHeight: 24
+                            active: vaela.state.mode === modelData
+                            onClicked: vaela.call("setMode",[modelData])
+                        }
                     }
+                    Rectangle {width: 1; height: 16; color: Theme.border; Layout.leftMargin: 4; Layout.rightMargin: 4}
+                    VButton {iconName: "search"; flat: true; implicitWidth: 28; implicitHeight: 24; Accessible.name: "Quick Commands"; onClicked: root.open("commands",Screen.virtualX+Screen.width/2,Screen.virtualY+Screen.height/2)}
+                    VButton {iconName: "configure"; flat: true; implicitWidth: 28; implicitHeight: 24; Accessible.name: "Vaela Settings"; onClicked: root.open("settings",Screen.virtualX+Screen.width/2,Screen.virtualY+Screen.height/2)}
                 }
-                Rectangle {width: 1; height: 16; color: Theme.border; Layout.leftMargin: 4; Layout.rightMargin: 4}
-                VButton {iconName: "search"; flat: true; implicitWidth: 28; implicitHeight: 24; Accessible.name: "Quick Commands"; onClicked: root.open("commands",0,0)}
-                VButton {iconName: "configure"; flat: true; implicitWidth: 28; implicitHeight: 24; Accessible.name: "Vaela Settings"; onClicked: root.open("settings",0,0)}
             }
         }
     }
 
-    // Workspace bar: vertical tabs that slide in when the pointer reaches the right edge.
-    property Window tabs: Window {
-        id: tabsWindow
-        property bool expanded:false
-        property int openMenus:0
-        readonly property bool opened: expanded || openMenus>0 || rename.visible
-        width: opened ? 276 : 10
-        height: Math.min(Screen.height-120,Math.max(170,(vaela.state.desktops || []).length*66+118))
-        color: "transparent"; visible: !!vaela.state.mode
-        flags: Qt.FramelessWindowHint
-        Component.onCompleted: {root.applyPalette(tabsWindow);vaela.layer(tabsWindow,"tabs")}
-        HoverHandler {
-            id:tabsHover
-            onHoveredChanged:if(hovered) {collapse.stop();tabsWindow.expanded=true} else collapse.restart()
-        }
-        Timer {id:collapse;interval:250;onTriggered:if(!tabsHover.hovered && !tabsWindow.openMenus && !rename.visible) tabsWindow.expanded=false}
-        Rectangle {
-            visible: !tabsWindow.opened
-            anchors {right: parent.right; rightMargin: 3; verticalCenter: parent.verticalCenter}
-            width: 4; height: 56; radius: 2; color: Theme.accent; opacity: 0.9
-        }
-        Shadow {anchors.fill: tabsPanel; radius: tabsPanel.radius; visible: tabsWindow.opened}
-        Rectangle {
-            id: tabsPanel
-            visible: tabsWindow.opened
-            anchors {fill: parent; margins: 10; rightMargin: 8}
-            radius: Theme.radiusLarge; color: Theme.panel; border.color: Theme.border
-            ColumnLayout {
-                anchors {fill: parent; margins: 10}
-                spacing: 8
-                RowLayout {
-                    Layout.fillWidth: true; Layout.leftMargin: 4
-                    Text {text: "Workspaces"; color: Theme.text; font.pixelSize: 15; font.weight: Font.DemiBold; Layout.fillWidth: true}
-                    Text {text: (vaela.state.desktops || []).length; color: Theme.faint; font.pixelSize: 12}
-                }
-                ListView {
-                    id: tabList
-                    Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 6
-                    model: vaela.state.desktops || []
-                    delegate: Rectangle {
-                        id: tab
-                        required property var modelData
-                        width: tabList.width; height: 60; radius: Theme.radius
-                        color: modelData.current ? Theme.accentSoft : tabMouse.containsMouse ? Theme.surfaceHover : Theme.surface
-                        border.width: modelData.current ? 1 : 0; border.color: Theme.accent
-                        Behavior on color {ColorAnimation {duration: Theme.fast}}
-                        MouseArea {id: tabMouse; anchors.fill: parent; hoverEnabled: true; onClicked: vaela.call("desktop",[tab.modelData.id])}
-                        ToolTip.text: modelData.windows.join("\n") || "Empty workspace"
-                        ToolTip.visible: tabMouse.containsMouse
-                        ToolTip.delay: 600
-                        RowLayout {
-                            anchors {fill: parent; leftMargin: 10; rightMargin: 4}
-                            spacing: 10
-                            Rectangle {
-                                width: 28; height: 28; radius: 14
-                                color: tab.modelData.current ? Theme.accent : Theme.surfacePressed
-                                Text {anchors.centerIn: parent; text: tab.modelData.id; color: tab.modelData.current ? "white" : Theme.muted; font.pixelSize: 12; font.weight: Font.DemiBold}
-                            }
-                            ColumnLayout {
-                                Layout.fillWidth: true; spacing: 3
-                                Text {text: tab.modelData.name; color: Theme.text; font.pixelSize: 13; font.weight: tab.modelData.current ? Font.DemiBold : Font.Normal; elide: Text.ElideRight; Layout.fillWidth: true}
-                                RowLayout {
-                                    spacing: 5; Layout.fillWidth: true
-                                    Image {source: Theme.icon(root.modeIcons[tab.modelData.mode] || "window", Theme.muted); sourceSize: Qt.size(12,12); Layout.preferredWidth: 12; Layout.preferredHeight: 12}
-                                    Text {
-                                        text: tab.modelData.mode+" · "+tab.modelData.windows.length+(tab.modelData.windows.length === 1 ? " window" : " windows")
-                                        color: Theme.muted; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true
+    // Workspace bar, on each monitor Vaela covers: vertical tabs that slide in when the pointer reaches the right edge.
+    property Instantiator tabs: Instantiator {
+        model: vaela.screens
+        delegate: Window {
+            id: tabsWindow
+            required property string modelData
+            property bool expanded:false
+            property bool placed:false
+            property int openMenus:0
+            readonly property bool opened: expanded || openMenus>0 || rename.visible
+            width: opened ? 276 : 10
+            height: Math.min(Screen.height-120,Math.max(170,(vaela.state.desktops || []).length*66+118))
+            color: "transparent"; visible: placed && !!vaela.state.mode
+            flags: Qt.FramelessWindowHint
+            Component.onCompleted: {root.applyPalette(tabsWindow);vaela.layer(tabsWindow,"tabs",0,0,modelData);placed=true}
+            HoverHandler {
+                id:tabsHover
+                onHoveredChanged:if(hovered) {collapse.stop();tabsWindow.expanded=true} else collapse.restart()
+            }
+            Timer {id:collapse;interval:250;onTriggered:if(!tabsHover.hovered && !tabsWindow.openMenus && !rename.visible) tabsWindow.expanded=false}
+            Rectangle {
+                visible: !tabsWindow.opened
+                anchors {right: parent.right; rightMargin: 3; verticalCenter: parent.verticalCenter}
+                width: 4; height: 56; radius: 2; color: Theme.accent; opacity: 0.9
+            }
+            Shadow {anchors.fill: tabsPanel; radius: tabsPanel.radius; visible: tabsWindow.opened}
+            Rectangle {
+                id: tabsPanel
+                visible: tabsWindow.opened
+                anchors {fill: parent; margins: 10; rightMargin: 8}
+                radius: Theme.radiusLarge; color: Theme.panel; border.color: Theme.border
+                ColumnLayout {
+                    anchors {fill: parent; margins: 10}
+                    spacing: 8
+                    RowLayout {
+                        Layout.fillWidth: true; Layout.leftMargin: 4
+                        Text {text: "Workspaces"; color: Theme.text; font.pixelSize: 15; font.weight: Font.DemiBold; Layout.fillWidth: true}
+                        Text {text: (vaela.state.desktops || []).length; color: Theme.faint; font.pixelSize: 12}
+                    }
+                    ListView {
+                        id: tabList
+                        Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 6
+                        model: vaela.state.desktops || []
+                        delegate: Rectangle {
+                            id: tab
+                            required property var modelData
+                            width: tabList.width; height: 60; radius: Theme.radius
+                            color: modelData.current ? Theme.accentSoft : tabMouse.containsMouse ? Theme.surfaceHover : Theme.surface
+                            border.width: modelData.current ? 1 : 0; border.color: Theme.accent
+                            Behavior on color {ColorAnimation {duration: Theme.fast}}
+                            MouseArea {id: tabMouse; anchors.fill: parent; hoverEnabled: true; onClicked: vaela.call("desktop",[tab.modelData.id])}
+                            ToolTip.text: modelData.windows.join("\n") || "Empty workspace"
+                            ToolTip.visible: tabMouse.containsMouse
+                            ToolTip.delay: 600
+                            RowLayout {
+                                anchors {fill: parent; leftMargin: 10; rightMargin: 4}
+                                spacing: 10
+                                Rectangle {
+                                    width: 28; height: 28; radius: 14
+                                    color: tab.modelData.current ? Theme.accent : Theme.surfacePressed
+                                    Text {anchors.centerIn: parent; text: tab.modelData.id; color: tab.modelData.current ? "white" : Theme.muted; font.pixelSize: 12; font.weight: Font.DemiBold}
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 3
+                                    Text {text: tab.modelData.name; color: Theme.text; font.pixelSize: 13; font.weight: tab.modelData.current ? Font.DemiBold : Font.Normal; elide: Text.ElideRight; Layout.fillWidth: true}
+                                    RowLayout {
+                                        spacing: 5; Layout.fillWidth: true
+                                        Image {source: Theme.icon(root.modeIcons[tab.modelData.mode] || "window", Theme.muted); sourceSize: Qt.size(12,12); Layout.preferredWidth: 12; Layout.preferredHeight: 12}
+                                        Text {
+                                            text: tab.modelData.mode+" · "+tab.modelData.windows.length+(tab.modelData.windows.length === 1 ? " window" : " windows")
+                                            color: Theme.muted; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true
+                                        }
                                     }
                                 }
-                            }
-                            VButton {
-                                iconName: "overflow-menu"; flat: true; implicitWidth: 28; implicitHeight: 28; Accessible.name: "Workspace options"
-                                onClicked: workspaceMenu.popup()
-                                Menu {
-                                    id: workspaceMenu
-                                    onOpened:++tabsWindow.openMenus
-                                    onClosed:{--tabsWindow.openMenus;collapse.restart()}
-                                    MenuItem {text:"Rename…"; onTriggered:{rename.workspaceId=tab.modelData.id;renameName.text=tab.modelData.name;rename.open();tabsWindow.requestActivate();renameName.forceActiveFocus()}}
-                                    MenuItem {text:"Remove workspace"; enabled:(vaela.state.desktops || []).length>1; onTriggered:vaela.call("removeDesktop",[tab.modelData.id])}
+                                VButton {
+                                    iconName: "overflow-menu"; flat: true; implicitWidth: 28; implicitHeight: 28; Accessible.name: "Workspace options"
+                                    onClicked: workspaceMenu.popup()
+                                    Menu {
+                                        id: workspaceMenu
+                                        onOpened:++tabsWindow.openMenus
+                                        onClosed:{--tabsWindow.openMenus;collapse.restart()}
+                                        MenuItem {text:"Rename…"; onTriggered:{rename.workspaceId=tab.modelData.id;renameName.text=tab.modelData.name;rename.open();tabsWindow.requestActivate();renameName.forceActiveFocus()}}
+                                        MenuItem {text:"Remove workspace"; enabled:(vaela.state.desktops || []).length>1; onTriggered:vaela.call("removeDesktop",[tab.modelData.id])}
+                                    }
                                 }
                             }
                         }
                     }
+                    VButton {text: "New workspace"; iconName: "list-add"; flat: true; Layout.fillWidth: true; onClicked: vaela.call("addDesktop")}
                 }
-                VButton {text: "New workspace"; iconName: "list-add"; flat: true; Layout.fillWidth: true; onClicked: vaela.call("addDesktop")}
             }
-        }
-        Dialog {
-            id:rename; property int workspaceId:0; title:"Rename workspace"; modal:true
-            anchors.centerIn: parent; width: 220
-            standardButtons:Dialog.Ok | Dialog.Cancel
-            TextField {id:renameName; placeholderText:"Workspace name"; width: parent.width}
-            onAccepted:vaela.call("renameDesktop",[workspaceId,renameName.text])
+            Dialog {
+                id:rename; property int workspaceId:0; title:"Rename workspace"; modal:true
+                anchors.centerIn: parent; width: 220
+                standardButtons:Dialog.Ok | Dialog.Cancel
+                TextField {id:renameName; placeholderText:"Workspace name"; width: parent.width}
+                onAccepted:vaela.call("renameDesktop",[workspaceId,renameName.text])
+            }
         }
     }
 
@@ -282,7 +306,13 @@ QtObject {
         property double shownAt: 0
         property int originX: 0
         property int originY: 0
+        property string recording: ""   // shortcut waiting for keys
+        property var clash: null        // {id, keys, by}: keys that something else already uses
         color: "transparent"; flags:Qt.FramelessWindowHint
+        onVisibleChanged: if(!visible) {
+            if(recording) vaela.call("recordShortcut",[""])
+            recording=""; clash=null
+        }
         Component.onCompleted: root.applyPalette(overlay)
         title: view === "radial-settings" ? "Radial Menu" : view === "settings" ? "Vaela Settings" : view === "radial" ? "Vaela Radial Menu" : "Quick Commands"
         // Switching views hides and reshows this window; the focus loss from that hide
@@ -404,7 +434,7 @@ QtObject {
                             }
                             Card {
                                 title: "Mouse gestures"
-                                subtitle: "Hold the right button still for half a second for the radial menu, move onto an item and release to open it. A quick right-click opens the app's own menu. Draw with the right button for gestures. Shift + right-click skips Vaela."
+                                subtitle: "Hold the right button still for the radial menu, move onto an item and release to open it. A quick right-click opens the app's own menu. Draw with the right button for gestures. Shift + right-click skips Vaela."
                                 SettingRow {
                                     label: "Right-button gestures and radial menu"
                                     Switch {checked: vaela.gestures; onToggled: vaela.setting("Gestures",checked)}
@@ -413,6 +443,11 @@ QtObject {
                                     label: "Stroke length before a gesture starts"
                                     Slider {from: 12; to: 120; stepSize: 1; value: vaela.threshold; Layout.preferredWidth: 200; onMoved: vaela.setting("Threshold",Math.round(value))}
                                     Text {text: vaela.threshold+" px"; color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight}
+                                }
+                                SettingRow {
+                                    label: "Hold time before the radial menu opens"
+                                    Slider {from: 150; to: 2000; stepSize: 50; value: vaela.radialDelay; Layout.preferredWidth: 200; onMoved: vaela.setting("RadialDelay",Math.round(value))}
+                                    Text {text: (vaela.radialDelay/1000).toFixed(2)+" s"; color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight}
                                 }
                             }
                             Card {
@@ -437,21 +472,94 @@ QtObject {
                             }
                             Card {
                                 title: "Radial menu"; subtitle: "Applications, commands and desktop actions around the pointer."
-                                VButton {text: "Customize radial menu…"; iconName: "view-list-icons"; accent: true; onClicked: root.open("radial-settings",0,0)}
+                                VButton {text: "Customize radial menu…"; iconName: "view-list-icons"; accent: true; onClicked: root.reopen("radial-settings")}
+                            }
+                            Card {
+                                title: "Monitors"
+                                subtitle: "Where the layout switch, workspace bar, gestures and tiling work. Other monitors behave like plain Plasma."
+                                RowLayout {
+                                    spacing: 6; Layout.fillWidth: true
+                                    Repeater {
+                                        model: root.monitorChoices
+                                        VButton {
+                                            required property var modelData
+                                            text: modelData.label; Layout.fillWidth: true
+                                            active: root.monitorChoice === modelData.value
+                                            // Choosing starts from the monitors in use now.
+                                            onClicked: vaela.setting("Monitors",modelData.value !== "chosen" ? modelData.value
+                                                : (vaela.state.outputs || []).filter(o=>o.covered).map(o=>o.name).join(","))
+                                        }
+                                    }
+                                }
+                                Repeater {
+                                    model: vaela.state.outputs || []
+                                    delegate: SettingRow {
+                                        id: monitorRow
+                                        required property var modelData
+                                        label: (modelData.label !== modelData.name ? modelData.label+"  ·  " : "")+modelData.name+(modelData.primary ? "  ·  primary" : "")
+                                        Switch {
+                                            checked: monitorRow.modelData.covered
+                                            enabled: root.monitorChoice === "chosen" && !(checked && (vaela.state.outputs || []).filter(o=>o.covered).length === 1)
+                                            onToggled: root.toggleMonitor(monitorRow.modelData.name,checked)
+                                        }
+                                    }
+                                }
                             }
                             Card {
                                 title: "Keyboard shortcuts"
+                                subtitle: "Click a shortcut, then press the new keys. Esc cancels, Backspace removes it. Layout keys take over Plasma's keys only in the layouts named."
                                 Repeater {
-                                    model: root.keys
-                                    delegate: RowLayout {
+                                    model: vaela.state.shortcuts || []
+                                    delegate: ColumnLayout {
                                         id: keyRow
                                         required property var modelData
-                                        Layout.fillWidth: true; spacing: 12
-                                        KeyCap {text: keyRow.modelData[0]; Layout.preferredWidth: 170}
-                                        Text {text: keyRow.modelData[1]; color: Theme.text; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.WordWrap}
+                                        readonly property bool editing: overlay.recording === modelData.id
+                                        readonly property bool clashing: !!overlay.clash && overlay.clash.id === modelData.id
+                                        Layout.fillWidth: true; spacing: 6
+                                        RowLayout {
+                                            Layout.fillWidth: true; spacing: 8
+                                            ColumnLayout {
+                                                Layout.fillWidth: true; spacing: 1
+                                                Text {text: keyRow.modelData.label; color: Theme.text; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight}
+                                                Text {visible: !!keyRow.modelData.layout; text: "Only in "+keyRow.modelData.layout; color: Theme.faint; font.pixelSize: 11}
+                                            }
+                                            VButton {
+                                                visible: keyRow.modelData.keys !== keyRow.modelData["default"]
+                                                iconName: "edit-undo"; flat: true; implicitWidth: 28; implicitHeight: 28
+                                                Accessible.name: "Reset to "+root.keyLabel(keyRow.modelData["default"])
+                                                ToolTip.text: Accessible.name; ToolTip.visible: hovered; ToolTip.delay: 600
+                                                onClicked: {overlay.clash=null;vaela.call("setShortcut",[keyRow.modelData.id,keyRow.modelData["default"],false])}
+                                            }
+                                            VButton {
+                                                text: keyRow.editing ? "Press keys…" : root.keyLabel(keyRow.modelData.keys)
+                                                active: keyRow.editing; Layout.preferredWidth: 190
+                                                Accessible.name: keyRow.modelData.label+": "+text
+                                                onClicked: {
+                                                    overlay.clash=null
+                                                    overlay.recording=keyRow.editing ? "" : keyRow.modelData.id
+                                                    vaela.call("recordShortcut",[overlay.recording])
+                                                }
+                                            }
+                                        }
+                                        Rectangle {
+                                            visible: keyRow.clashing
+                                            Layout.fillWidth: true; implicitHeight: clashRow.implicitHeight + 16; radius: Theme.radiusSmall
+                                            color: Theme.accentSoft; border.color: Theme.accent
+                                            RowLayout {
+                                                id: clashRow
+                                                anchors {fill: parent; margins: 8; leftMargin: 12}
+                                                spacing: 8
+                                                Text {
+                                                    text: keyRow.clashing ? root.keyLabel(overlay.clash.keys)+" is used by "+overlay.clash.by+"." : ""
+                                                    color: Theme.text; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                                                }
+                                                VButton {text: "Replace"; accent: true; implicitHeight: 28; onClicked: vaela.call("setShortcut",[overlay.clash.id,overlay.clash.keys,true])}
+                                                VButton {text: "Cancel"; flat: true; implicitHeight: 28; onClicked: overlay.clash=null}
+                                            }
+                                        }
                                     }
                                 }
-                                VButton {text: "Edit keyboard shortcuts…"; iconName: "preferences-desktop-keyboard-shortcut"; onClicked: vaela.launch("shortcuts")}
+                                VButton {text: "All shortcuts in System Settings…"; iconName: "preferences-desktop-keyboard-shortcut"; onClicked: {overlay.hide();vaela.launch("shortcuts")}}
                             }
                             Card {
                                 title: "System"; subtitle: "Plasma's settings pages, opened directly."
@@ -558,7 +666,7 @@ QtObject {
                         Row {
                             anchors.horizontalCenter: parent.horizontalCenter; spacing: 2; topPadding: 4
                             VButton {iconName: "go-previous"; flat: true; implicitWidth: 24; implicitHeight: 24; iconSize: 12; visible: radial.entries.length>8; enabled: overlay.radialPage>0; Accessible.name: "Previous page"; onClicked: {overlay.hot=-1;--overlay.radialPage}}
-                            VButton {iconName: "configure"; flat: true; implicitWidth: 24; implicitHeight: 24; iconSize: 14; Accessible.name: "Customize radial menu"; onClicked: root.open("radial-settings",0,0)}
+                            VButton {iconName: "configure"; flat: true; implicitWidth: 24; implicitHeight: 24; iconSize: 14; Accessible.name: "Customize radial menu"; onClicked: root.reopen("radial-settings")}
                             VButton {iconName: "go-next"; flat: true; implicitWidth: 24; implicitHeight: 24; iconSize: 12; visible: radial.entries.length>8; enabled: (overlay.radialPage+1)*8<radial.entries.length; Accessible.name: "Next page"; onClicked: {overlay.hot=-1;++overlay.radialPage}}
                         }
                     }
