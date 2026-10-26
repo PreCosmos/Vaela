@@ -12,5 +12,10 @@ inline QString columnShortcut(Qt::Key key, Qt::KeyboardModifiers modifiers, bool
         if(key==Qt::Key_Left) return "column-left";
         if(key==Qt::Key_Right) return "column-right";
     }
+    // Takes priority over Plasma's quick tiling only while the strip is in use.
+    if(scrollable && modifiers==Qt::MetaModifier) {
+        if(key==Qt::Key_Left) return "focus-previous";
+        if(key==Qt::Key_Right) return "focus-next";
+    }
     return {};
 }

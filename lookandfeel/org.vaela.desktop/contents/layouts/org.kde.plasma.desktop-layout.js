@@ -1,4 +1,4 @@
-// Vela's first-login layout: a top bar, a dock that dodges windows, and a
+// Vaela's first-login layout: a top bar, a dock that dodges windows, and a
 // right-edge workspace bar that slides in when the pointer reaches the edge.
 // Plasma runs this only when the user has no panel layout yet.
 
@@ -7,15 +7,11 @@ for (const desktop of desktopsForActivity(currentActivity())) {
 }
 
 // Top bar: launcher and activity on the left, tray and clock on the right.
-// Vela Shell supplies the layout switch at the far right.
+// Vaela Shell's layout switch opens over the right end when the pointer reaches it.
 const topBar = new Panel;
 topBar.location = "top";
 topBar.height = 34;
 topBar.floating = false;
-topBar.alignment = "left";
-topBar.lengthMode = "custom";
-topBar.minimumLength = Math.max(320, screenGeometry(topBar.screen).width - 460);
-topBar.maximumLength = topBar.minimumLength;
 topBar.addWidget("org.kde.plasma.kickoff");
 topBar.addWidget("org.kde.plasma.showActivityManager");
 topBar.addWidget("org.kde.plasma.panelspacer");
@@ -39,4 +35,4 @@ tasks.writeConfig("launchers", [
     "applications:systemsettings.desktop",
 ]);
 
-// The tab-style workspace bar is supplied by vela-shell.
+// The tab-style workspace bar is supplied by vaela-shell.

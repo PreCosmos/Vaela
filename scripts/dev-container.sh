@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create the Fedora 45 distrobox used to build and test Vela, or bring its packages up to date.
+# Create the Fedora 45 distrobox used to build and test Vaela, or bring its packages up to date.
 # Its home lives in .devbox/home inside the repo, so build caches stay on this drive.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -16,7 +16,7 @@ BUILD_PKGS=(
   kf6-kcmutils-devel kf6-kconfig-devel kf6-kcoreaddons-devel kf6-ki18n-devel
   kf6-kglobalaccel-devel kf6-kwindowsystem-devel kf6-kpackage-devel
 )
-# Enough of Plasma to run a Vela session nested in a window.
+# Enough of Plasma to run a Vaela session nested in a window.
 RUN_PKGS=(
   kwin plasma-workspace plasma-desktop plasma-systemsettings kscreen plasma-pa
   plasma-print-manager powerdevil kinfocenter plasma-breeze breeze-icon-theme

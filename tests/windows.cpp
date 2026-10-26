@@ -11,9 +11,9 @@ int main(int argc,char **argv) {
     QGuiApplication app(argc,argv);
     QQuickWindow a,b,c;
     int i=0;
-    for(auto w:{&a,&b,&c}) {w->setTitle(QStringLiteral("Vela test %1").arg(++i));w->resize(400,300);w->setColor(Qt::darkBlue);w->show();}
-    QDBusInterface controller("org.vela.Controller","/Controller","org.vela.Controller");
-    QDBusInterface probe("org.vela.InputProbe","/InputProbe","org.vela.InputProbe");
+    for(auto w:{&a,&b,&c}) {w->setTitle(QStringLiteral("Vaela test %1").arg(++i));w->resize(400,300);w->setColor(Qt::darkBlue);w->show();}
+    QDBusInterface controller("org.vaela.Controller","/Controller","org.vaela.Controller");
+    QDBusInterface probe("org.vaela.InputProbe","/InputProbe","org.vaela.InputProbe");
     auto geometry=[&](const QQuickWindow &w) {
         auto object=QJsonDocument::fromJson(probe.call("geometry",w.title()).arguments().first().toString().toUtf8()).object();
         return QRectF(object["x"].toDouble(),object["y"].toDouble(),object["w"].toDouble(),object["h"].toDouble());
@@ -54,7 +54,7 @@ int main(int argc,char **argv) {
         auto state=QJsonDocument::fromJson(reply.arguments().first().toString().toUtf8()).object();
         for(auto entry:state["desktops"].toArray()) if(entry.toObject()["current"].toBool()) {
             auto windows=entry.toObject()["windows"].toArray();
-            check(windows.size()==3 && windows[0].toString()=="Vela test 2" && windows[1].toString()=="Vela test 1","Column move did not reorder the strip");
+            check(windows.size()==3 && windows[0].toString()=="Vaela test 2" && windows[1].toString()=="Vaela test 1","Column move did not reorder the strip");
         }
         controller.call("action","column-right");
     });
@@ -63,7 +63,7 @@ int main(int argc,char **argv) {
         auto state=QJsonDocument::fromJson(reply.arguments().first().toString().toUtf8()).object();
         for(auto entry:state["desktops"].toArray()) if(entry.toObject()["current"].toBool()) {
             auto windows=entry.toObject()["windows"].toArray();
-            check(windows.size()==3 && windows[0].toString()=="Vela test 1" && windows[1].toString()=="Vela test 2","Column move right did not restore strip order");
+            check(windows.size()==3 && windows[0].toString()=="Vaela test 1" && windows[1].toString()=="Vaela test 2","Column move right did not restore strip order");
         }
         controller.call("setMode","Float");
     });
@@ -91,6 +91,7 @@ int main(int argc,char **argv) {
     });
     QTimer::singleShot(9400,[&]{check(probe.call("stepResize",c.title(),100.,0.).arguments().first().toBool(),"Native column resize did not start");});
     QTimer::singleShot(10000,[&]{
+        if(!(c.width()>beforeC && a.width()==beforeA && b.width()==beforeB)) qCritical()<<"widths before the drag"<<beforeA<<beforeB<<beforeC;
         check(c.width()>beforeC && a.width()==beforeA && b.width()==beforeB,"Native column resize changed independent widths");
         auto ra=geometry(a),rb=geometry(b),rc=geometry(c);
         check(qAbs(rb.x()-ra.right()-8)<2 && qAbs(rc.x()-rb.right()-8)<2,"Columns did not follow the active resize without gaps or overlaps");

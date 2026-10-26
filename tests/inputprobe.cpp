@@ -17,17 +17,27 @@
 using namespace KWin;
 class InputProbe : public Plugin {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface","org.vela.InputProbe")
+    Q_CLASSINFO("D-Bus Interface","org.vaela.InputProbe")
     static auto now() {return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());}
 public:
     InputProbe() {
         waylandServer()->seat()->setHasPointer(true);waylandServer()->seat()->setHasKeyboard(true);
-        auto bus=QDBusConnection::sessionBus();bus.registerService("org.vela.InputProbe");bus.registerObject("/InputProbe",this,QDBusConnection::ExportAllSlots);
+        auto bus=QDBusConnection::sessionBus();bus.registerService("org.vaela.InputProbe");bus.registerObject("/InputProbe",this,QDBusConnection::ExportAllSlots);
     }
 public Q_SLOTS:
     void motion(double x,double y) {input()->pointer()->processMotionAbsolute({x,y},now());input()->pointer()->processFrame(nullptr);}
     void relative(double x,double y) {input()->pointer()->processMotion({x,y},{x,y},now(),nullptr);input()->pointer()->processFrame(nullptr);}
     void button(int code,bool pressed) {input()->pointer()->processButton(code,pressed?PointerButtonState::Pressed:PointerButtonState::Released,now());input()->pointer()->processFrame(nullptr);}
+    void key(int code,bool pressed) {input()->keyboard()->processKey(code,pressed?KeyboardKeyState::Pressed:KeyboardKeyState::Released,now());}
+    QString active() {auto w=workspace()->activeWindow();return w?w->caption():QString();}
+    // Size of the topmost visible surface at a point, including the shell's layer-shell views.
+    QString surfaceAt(double x,double y) {
+        const auto stack=workspace()->stackingOrder();
+        for(auto it=stack.crbegin();it!=stack.crend();++it) if((*it)->isShown() && (*it)->frameGeometry().contains(QPointF(x,y))) {
+            auto r=(*it)->frameGeometry();return QString::fromUtf8(QJsonDocument(QJsonObject{{"w",r.width()},{"h",r.height()}}).toJson(QJsonDocument::Compact));
+        }
+        return "{}";
+    }
     bool hover(const QString &caption) {
         for(auto w:workspace()->windows()) if(w->caption()==caption) {workspace()->activateWindow(w);auto center=w->frameGeometry().center();motion(center.x(),center.y());return true;}
         return false;
@@ -43,7 +53,10 @@ public Q_SLOTS:
     }
     bool stepResize(const QString &caption,double dx,double dy) {
         for(auto w:workspace()->windows()) if(w->caption()==caption && w->isInteractiveResize()) {
-            w->updateInteractiveMoveResize(w->moveResizeGeometry().bottomRight()+QPointF(dx,dy),Qt::NoModifier);return true;
+            // Move the pointer as a real drag does: KWin recomputes the size from the cursor whenever
+            // it re-evaluates the pointer, which would undo a resize that left the cursor behind.
+            const auto target=w->moveResizeGeometry().bottomRight()+QPointF(dx,dy);
+            motion(target.x(),target.y());return true;
         }
         return false;
     }
@@ -82,7 +95,7 @@ class ProbeFactory : public PluginFactory {
     Q_INTERFACES(KWin::PluginFactory)
 public:
     std::unique_ptr<Plugin> create() const override {
-        if(qEnvironmentVariable("VELA_TEST_SESSION")!="1") return {};
+        if(qEnvironmentVariable("VAELA_TEST_SESSION")!="1") return {};
         return std::make_unique<InputProbe>();
     }
 };

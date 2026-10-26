@@ -16,7 +16,7 @@ public:
     int shown=0,hidden=0;
     bool closed=false;int presses=0,releases=0;
     ContextWindow() {
-        setWindowTitle("Vela mouse test");resize(400,300);menu.addAction("Test context menu");
+        setWindowTitle("Vaela mouse test");resize(400,300);menu.addAction("Test context menu");
         connect(&menu,&QMenu::aboutToShow,this,[this]{++shown;});connect(&menu,&QMenu::aboutToHide,this,[this]{++hidden;});
     }
 protected:
@@ -28,8 +28,8 @@ protected:
 class MouseTest : public QObject {
     Q_OBJECT
     ContextWindow window;
-    QDBusInterface controller{"org.vela.Controller","/Controller","org.vela.Controller"};
-    QDBusInterface probe{"org.vela.InputProbe","/InputProbe","org.vela.InputProbe"};
+    QDBusInterface controller{"org.vaela.Controller","/Controller","org.vaela.Controller"};
+    QDBusInterface probe{"org.vaela.InputProbe","/InputProbe","org.vaela.InputProbe"};
     void button(bool down) {probe.call("button",273,down);}
     void motion(double x,double y) {probe.call("motion",x,y);}
     int desktop() {
@@ -42,7 +42,7 @@ private Q_SLOTS:
         QVERIFY(probe.isValid());controller.call("addDesktop");controller.call("desktop",1);window.show();QTest::qWait(300);
     }
     void workspaceGesturesThroughInputChain() {
-        // Blank space, away from the application window and Vela's panels.
+        // Blank space, away from the application window and Vaela's panels.
         motion(1100,600);button(true);motion(1170,600);button(false);QTRY_COMPARE(desktop(),2);
         motion(1100,600);button(true);motion(1030,600);button(false);QTRY_COMPARE(desktop(),1);
     }
@@ -64,7 +64,7 @@ private Q_SLOTS:
         controller.call("setMode","Float");controller.call("desktop",1);controller.call("setMode","Float");QTest::qWait(150);
     }
     void contextMenuAndRadialTiming() {
-        QVERIFY(probe.call("hover","Vela mouse test").arguments().first().toBool());QTest::qWait(100);
+        QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
         button(true);QTest::qWait(180);QCOMPARE(window.shown,0);
         QTRY_COMPARE_WITH_TIMEOUT(window.shown,1,400);
         QTRY_COMPARE_WITH_TIMEOUT(window.hidden,1,600);
@@ -72,10 +72,10 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(probe.call("radialVisible").arguments().first().toBool(),600);
         button(false);
         // Dismiss the overlay through a normal view change before testing hover targeting.
-        QDBusInterface shell("org.vela.Shell","/Shell","org.vela.Shell");shell.call("showView","dismiss",0,0);
+        QDBusInterface shell("org.vaela.Shell","/Shell","org.vaela.Shell");shell.call("showView","dismiss",0,0);
     }
     void downGestureClosesHoveredWindow() {
-        QVERIFY(probe.call("hover","Vela mouse test").arguments().first().toBool());QTest::qWait(100);
+        QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
         button(true);
         probe.call("relative",0.,80.);button(false);
         QTRY_VERIFY(window.closed);

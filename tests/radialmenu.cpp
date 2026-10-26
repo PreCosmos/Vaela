@@ -10,12 +10,12 @@ class RadialMenuTest : public QObject {
 private Q_SLOTS:
     void persistenceAndEmptyMenu() {
         QTemporaryDir directory;
-        auto config=KSharedConfig::openConfig(directory.filePath("velarc"),KConfig::SimpleConfig);
+        auto config=KSharedConfig::openConfig(directory.filePath("vaelarc"),KConfig::SimpleConfig);
         RadialMenu menu(config);
         QCOMPARE(menu.entries().size(),8);
         QVERIFY(!menu.addCommand("", "true", "utilities-terminal"));
         QVERIFY(!menu.error().isEmpty());
-        QVERIFY(!menu.addApplication("vela-no-such-application.desktop"));
+        QVERIFY(!menu.addApplication("vaela-no-such-application.desktop"));
         QVERIFY(menu.addCommand("My command","printf 'hello world' | cat","utilities-terminal"));
         QCOMPARE(menu.entries().size(),9);
         auto entry=menu.entries().last().toMap();auto id=entry["id"].toString();
@@ -31,7 +31,7 @@ private Q_SLOTS:
     }
     void applicationMetadata() {
         QTemporaryDir directory;
-        RadialMenu menu(KSharedConfig::openConfig(directory.filePath("velarc"),KConfig::SimpleConfig));
+        RadialMenu menu(KSharedConfig::openConfig(directory.filePath("vaelarc"),KConfig::SimpleConfig));
         menu.refreshApplications();QVERIFY(!menu.applications().isEmpty());
         auto app=menu.applications().first().toMap();
         QVERIFY(menu.addApplication(app["id"].toString()));
@@ -41,7 +41,7 @@ private Q_SLOTS:
     }
     void importedImageSurvivesSourceRemoval() {
         QTemporaryDir directory;
-        auto config=KSharedConfig::openConfig(directory.filePath("velarc"),KConfig::SimpleConfig);
+        auto config=KSharedConfig::openConfig(directory.filePath("vaelarc"),KConfig::SimpleConfig);
         RadialMenu menu(config);
         auto source=directory.filePath("icon.png");QImage image(32,32,QImage::Format_ARGB32);image.fill(Qt::red);QVERIFY(image.save(source));
         QVERIFY(menu.addCommand("Image test","true",source));
@@ -54,7 +54,7 @@ private Q_SLOTS:
     }
     void commandLaunchPreservesShellSyntax() {
         QTemporaryDir directory;
-        RadialMenu menu(KSharedConfig::openConfig(directory.filePath("velarc"),KConfig::SimpleConfig));
+        RadialMenu menu(KSharedConfig::openConfig(directory.filePath("vaelarc"),KConfig::SimpleConfig));
         QString marker=directory.filePath("result");
         QVERIFY(menu.addCommand("Write marker","printf '%s' 'hello world' | cat > '"+marker+"'","utilities-terminal"));
         menu.launch(menu.entries().last().toMap()["id"].toString());
@@ -63,7 +63,7 @@ private Q_SLOTS:
     }
     void malformedConfigurationIsNotOverwritten() {
         QTemporaryDir directory;
-        auto config=KSharedConfig::openConfig(directory.filePath("velarc"),KConfig::SimpleConfig);
+        auto config=KSharedConfig::openConfig(directory.filePath("vaelarc"),KConfig::SimpleConfig);
         KConfigGroup(config,"RadialMenu").writeEntry("Entries","broken json");config->sync();
         RadialMenu menu(config);QCOMPARE(menu.entries().size(),8);QVERIFY(!menu.error().isEmpty());
         QCOMPARE(KConfigGroup(config,"RadialMenu").readEntry("Entries",QString()),QString("broken json"));

@@ -28,7 +28,7 @@ class RadialUiTest : public QObject {
     }
 private Q_SLOTS:
     void initTestCase() {
-        menu=std::make_unique<RadialMenu>(KSharedConfig::openConfig(directory.filePath("velarc"),KConfig::SimpleConfig));
+        menu=std::make_unique<RadialMenu>(KSharedConfig::openConfig(directory.filePath("vaelarc"),KConfig::SimpleConfig));
         engine=std::make_unique<QQmlEngine>();engine->rootContext()->setContextProperty("radial",menu.get());engine->addImageProvider("menuicons",new MenuIcons);
         QQmlComponent component(engine.get(),QUrl::fromLocalFile(QStringLiteral(RADIAL_EDITOR_PATH)));
         QVERIFY2(component.isReady(),qPrintable(component.errorString()));
@@ -61,7 +61,7 @@ private Q_SLOTS:
 };
 int main(int argc,char **argv) {
     qputenv("QT_QPA_PLATFORM","offscreen");qputenv("QT_QUICK_BACKEND","software");
-    QGuiApplication app(argc,argv);app.setApplicationName("vela-radial-ui-test");
+    QGuiApplication app(argc,argv);app.setApplicationName("vaela-radial-ui-test");
     RadialUiTest test;return QTest::qExec(&test,argc,argv);
 }
 #include "radialui.moc"

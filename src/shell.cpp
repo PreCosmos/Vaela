@@ -18,6 +18,9 @@
 #include <QDebug>
 #include <QDesktopServices>
 #include <QTimer>
+#include <QThread>
+#include <QPalette>
+#include <QQuickStyle>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QCursor>
@@ -27,14 +30,14 @@
 #include <LayerShellQt/Shell>
 class Bridge : public QObject {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.vela.Shell")
+    Q_CLASSINFO("D-Bus Interface", "org.vaela.Shell")
     Q_PROPERTY(QVariantMap state READ state NOTIFY changed)
     Q_PROPERTY(bool gestures READ gestures NOTIFY changed)
     Q_PROPERTY(int threshold READ threshold NOTIFY changed)
     Q_PROPERTY(int gap READ gap NOTIFY changed)
     Q_PROPERTY(QVariantMap bindings READ bindings NOTIFY changed)
     QVariantMap data;
-    KSharedConfig::Ptr config=KSharedConfig::openConfig("velarc");
+    KSharedConfig::Ptr config=KSharedConfig::openConfig("vaelarc");
     bool pending=false, migrationAttempted=false;
 public:
     QVariantMap state() const {return data;}
@@ -55,7 +58,7 @@ public:
         auto timer=new QTimer(this); connect(timer,&QTimer::timeout,this,&Bridge::refresh);timer->start(350);refresh();
     }
     Q_INVOKABLE void call(QString method,QVariantList args={}) {
-        auto message=QDBusMessage::createMethodCall("org.vela.Controller","/Controller","org.vela.Controller",method);
+        auto message=QDBusMessage::createMethodCall("org.vaela.Controller","/Controller","org.vaela.Controller",method);
         // JavaScript numbers arrive as doubles; these D-Bus methods require an int.
         if(QStringList{"desktop","renameDesktop","removeDesktop"}.contains(method) && !args.isEmpty()) args[0]=args[0].toInt();
         message.setArguments(args);QDBusConnection::sessionBus().asyncCall(message);
@@ -71,15 +74,19 @@ public:
         else if(name=="screenshot") QProcess::startDetached("spectacle",{});
         else if(name=="shortcuts") QProcess::startDetached("systemsettings",{"kcm_keys"});
         else if(name=="system") QProcess::startDetached("systemsettings",{});
+        else if(name=="info") QProcess::startDetached("kinfocenter",{});
+        else if(name.startsWith("kcm_")) QProcess::startDetached("systemsettings",{name});
         else if(name=="activities") {
             auto message=QDBusMessage::createMethodCall("org.kde.plasmashell","/PlasmaShell","org.kde.PlasmaShell","toggleActivityManager");
             QDBusConnection::sessionBus().asyncCall(message);
         }
     }
-    Q_INVOKABLE void layer(QQuickWindow *window, QString kind, int x=0,int y=0) {
+    // Places a shell window; for overlays, returns the top-left corner it got in global coordinates.
+    Q_INVOKABLE QPoint layer(QQuickWindow *window, QString kind, int x=0,int y=0) {
         auto layer=LayerShellQt::Window::get(window);
-        layer->setLayer(LayerShellQt::Window::LayerTop);
-        layer->setExclusiveZone(kind=="top"?34:0);
+        // The layout switch opens over the right end of Plasma's top bar, which already reserves the space.
+        layer->setLayer(kind=="top" ? LayerShellQt::Window::LayerOverlay : LayerShellQt::Window::LayerTop);
+        layer->setExclusiveZone(0);
         if(kind=="tabs") layer->setActivateOnShow(false);
         layer->setKeyboardInteractivity(kind=="overlay" ? LayerShellQt::Window::KeyboardInteractivityExclusive : kind=="tabs" ? LayerShellQt::Window::KeyboardInteractivityOnDemand : LayerShellQt::Window::KeyboardInteractivityNone);
         if(kind=="top") layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop)|LayerShellQt::Window::AnchorRight);
@@ -93,7 +100,9 @@ public:
             int top=std::clamp(y-r.y()-window->height()/2,34,std::max(34,r.height()-window->height()));
             layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop)|LayerShellQt::Window::AnchorLeft);
             layer->setMargins(QMargins(left,top,0,0));
+            return {r.x()+left,r.y()+top};
         }
+        return {};
     }
 public Q_SLOTS:
     void showView(QString view,int x,int y) {
@@ -103,7 +112,7 @@ public Q_SLOTS:
     void refresh() {
         if(pending) return;
         pending=true;
-        auto m=QDBusMessage::createMethodCall("org.vela.Controller","/Controller","org.vela.Controller","state");
+        auto m=QDBusMessage::createMethodCall("org.vaela.Controller","/Controller","org.vaela.Controller","state");
         auto watcher=new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(m),this);
         connect(watcher,&QDBusPendingCallWatcher::finished,this,[this,watcher]{
             QDBusPendingReply<QString> reply=*watcher;pending=false;
@@ -111,7 +120,7 @@ public Q_SLOTS:
             if(next!=data){data=next;emit changed();}
             if(!migrationAttempted && !data.isEmpty()) {
                 migrationAttempted=true;
-                QFile script((qEnvironmentVariableIsSet("VELA_QML")?qEnvironmentVariable("VELA_QML"):QStringLiteral(VELA_QML_PATH)).replace("Main.qml","migrate-layout.js"));
+                QFile script((qEnvironmentVariableIsSet("VAELA_QML")?qEnvironmentVariable("VAELA_QML"):QStringLiteral(VAELA_QML_PATH)).replace("Main.qml","migrate-layout.js"));
                 if(script.open(QIODevice::ReadOnly)) {
                     auto message=QDBusMessage::createMethodCall("org.kde.plasmashell","/PlasmaShell","org.kde.PlasmaShell","evaluateScript");
                     message << QString::fromUtf8(script.readAll());
@@ -127,7 +136,7 @@ Q_SIGNALS:
 };
 class ShellAdaptor : public QDBusAbstractAdaptor {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.vela.Shell")
+    Q_CLASSINFO("D-Bus Interface", "org.vaela.Shell")
     Bridge *bridge;
 public:
     explicit ShellAdaptor(Bridge *bridge) : QDBusAbstractAdaptor(bridge),bridge(bridge) {}
@@ -135,19 +144,37 @@ public Q_SLOTS:
     void showView(const QString &view,int x,int y) {bridge->showView(view,x,y);}
 };
 int main(int argc,char**argv) {
-    QGuiApplication app(argc,argv);if(qEnvironmentVariable("VELA_SESSION")!="1") return 0;
-    app.setApplicationName("vela-shell"); app.setQuitOnLastWindowClosed(false);
-    if(QDBusConnection::sessionBus().interface()->isServiceRegistered("org.vela.Shell")) return 0;
+    QGuiApplication app(argc,argv);
+    // Autostart runs under systemd, which does not carry VAELA_SESSION. The KWin plugin
+    // registers its service only in a Vaela session, so its presence decides instead.
+    auto bus=QDBusConnection::sessionBus().interface();
+    for(int i=0;i<200 && !bus->isServiceRegistered("org.vaela.Controller");++i) QThread::msleep(100);
+    if(!bus->isServiceRegistered("org.vaela.Controller")) return 0;
+    app.setApplicationName("vaela-shell"); app.setQuitOnLastWindowClosed(false);
+    if(QDBusConnection::sessionBus().interface()->isServiceRegistered("org.vaela.Shell")) return 0;
     Bridge bridge;
     new ShellAdaptor(&bridge);
-    if(!QDBusConnection::sessionBus().registerService("org.vela.Shell")) return 0;
+    if(!QDBusConnection::sessionBus().registerService("org.vaela.Shell")) return 0;
     QDBusConnection::sessionBus().registerObject("/Shell",&bridge,QDBusConnection::ExportAdaptors);
-    RadialMenu radial(KSharedConfig::openConfig("velarc"));
+    RadialMenu radial(KSharedConfig::openConfig("vaelarc"));
+    // The shell draws its own dark surfaces; Fusion with a matching palette keeps the stock
+    // controls (sliders, combo boxes, menus) consistent with them under any system theme.
+    QQuickStyle::setStyle("Fusion");
+    QPalette palette;
+    const QColor panel("#1c1d23"),surface("#25262e"),text("#ecedf2"),muted("#9b9daa"),accent("#ef6a4f");
+    for(auto role:{QPalette::Window,QPalette::Base,QPalette::ToolTipBase}) palette.setColor(role,panel);
+    for(auto role:{QPalette::Button,QPalette::AlternateBase,QPalette::Mid}) palette.setColor(role,surface);
+    for(auto role:{QPalette::WindowText,QPalette::Text,QPalette::ButtonText,QPalette::ToolTipText,QPalette::BrightText}) palette.setColor(role,text);
+    palette.setColor(QPalette::PlaceholderText,muted);
+    palette.setColor(QPalette::Light,QColor("#3a3b46"));palette.setColor(QPalette::Dark,QColor("#141519"));palette.setColor(QPalette::Shadow,Qt::black);
+    palette.setColor(QPalette::Highlight,accent);palette.setColor(QPalette::HighlightedText,Qt::white);
+    palette.setColor(QPalette::Disabled,QPalette::Text,muted);palette.setColor(QPalette::Disabled,QPalette::ButtonText,muted);palette.setColor(QPalette::Disabled,QPalette::WindowText,muted);
+    QGuiApplication::setPalette(palette);
     QQmlApplicationEngine engine;
     engine.addImageProvider("menuicons",new MenuIcons);
-    engine.rootContext()->setContextProperty("vela",&bridge);
+    engine.rootContext()->setContextProperty("vaela",&bridge);
     engine.rootContext()->setContextProperty("radial",&radial);
-    engine.load(QUrl::fromLocalFile(qEnvironmentVariableIsSet("VELA_QML")?qEnvironmentVariable("VELA_QML"):QStringLiteral(VELA_QML_PATH)));
+    engine.load(QUrl::fromLocalFile(qEnvironmentVariableIsSet("VAELA_QML")?qEnvironmentVariable("VAELA_QML"):QStringLiteral(VAELA_QML_PATH)));
     if(engine.rootObjects().isEmpty()) return 1;
     return app.exec();
 }

@@ -22,6 +22,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
+#include <QElapsedTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -30,11 +31,12 @@
 #include <algorithm>
 using namespace KWin;
 
-class Vela : public Plugin, public InputEventFilter {
+class Vaela : public Plugin, public InputEventFilter {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.vela.Controller")
-    KSharedConfig::Ptr config = KSharedConfig::openConfig("velarc");
+    Q_CLASSINFO("D-Bus Interface", "org.vaela.Controller")
+    KSharedConfig::Ptr config = KSharedConfig::openConfig("vaelarc");
     QTimer hold, contextShow, contextHide, layoutTimer;
+    QElapsedTimer hoverClock;
     Gesture gesture;
     QPointer<Window> target, lastWindow;
     bool down = false, radial = false, contextShown = false, contextDelivered = false, arranging = false;
@@ -66,6 +68,17 @@ class Vela : public Plugin, public InputEventFilter {
         columns[key]=Layout::resize(widths,index%nc,requested.width(),120);
         rows[key]=Layout::resize(heights,index/nc,requested.height(),100);
     }
+    QString appId(Window *w) const { auto id=w->desktopFileName(); return id.isEmpty() ? w->resourceClass() : id; }
+    // Scrollable column widths outlive their windows, per application, as a share of the screen width.
+    double storedWidth(Window *w, const QRectF &area) const {
+        const double share=KConfigGroup(config,"ScrollableWidths").readEntry(appId(w),0.);
+        return share>0 ? std::clamp(share*area.width(),120.,area.width()*2) : std::max(240.,area.width()*.65);
+    }
+    void saveWidth(Window *w) {
+        if(mode()!="Scrollable" || !scrollWidths.contains(w) || appId(w).isEmpty()) return;
+        const QRectF area=workspace()->clientArea(MaximizeArea,w->output());
+        KConfigGroup(config,"ScrollableWidths").writeEntry(appId(w),scrollWidths[w]/area.width());config->sync();
+    }
     QString activity() const { auto a=workspace()->activities(); return a && !a->current().isEmpty() ? a->current() : QStringLiteral("default"); }
     QString mode(VirtualDesktop *desktop = nullptr) const {
         if(!desktop) desktop=VirtualDesktopManager::self()->currentDesktop();
@@ -74,7 +87,7 @@ class Vela : public Plugin, public InputEventFilter {
     }
     bool locked() const { return waylandServer() && waylandServer()->isScreenLocked(); }
     void ui(QString view, QPointF pos = {}) {
-        auto m=QDBusMessage::createMethodCall("org.vela.Shell", "/Shell", "org.vela.Shell", "showView");
+        auto m=QDBusMessage::createMethodCall("org.vaela.Shell", "/Shell", "org.vaela.Shell", "showView");
         m << view << int(pos.x()) << int(pos.y()); QDBusConnection::sessionBus().asyncCall(m);
     }
     void stopHold() {hold.stop();contextShow.stop();contextHide.stop();}
@@ -98,13 +111,13 @@ class Vela : public Plugin, public InputEventFilter {
         contextShown=false;
     }
     void shortcut(QString id, QString key, std::function<void()> fn) {
-        auto a=new QAction(id,this); a->setObjectName(id); a->setProperty("componentName", "vela");
+        auto a=new QAction(id,this); a->setObjectName(id); a->setProperty("componentName", "vaela");
         KGlobalAccel::self()->setDefaultShortcut(a,{QKeySequence(key)});
         KGlobalAccel::self()->setShortcut(a,{QKeySequence(key)});
         connect(a,&QAction::triggered,this,[this,fn]{if(!locked()) fn();});
     }
     void schedule() { if(!arranging) layoutTimer.start(); }
-    bool appWindow(Window *w) const { return w && w->isNormalWindow() && !w->isSpecialWindow() && !w->isInternal() && !w->inherits("KWin::LayerShellV1Window") && w->resourceClass()!="vela-shell"; }
+    bool appWindow(Window *w) const { return w && w->isNormalWindow() && !w->isSpecialWindow() && !w->isInternal() && !w->inherits("KWin::LayerShellV1Window") && w->resourceClass()!="vaela-shell"; }
     bool eligible(Window *w) const {
         return appWindow(w) && w->isMovable() && w->isResizable()
             && w->isOnCurrentDesktop() && w->isOnCurrentActivity() && !w->isOnAllDesktops()
@@ -117,9 +130,11 @@ class Vela : public Plugin, public InputEventFilter {
         connect(w,&Window::fullScreenChanged,this,[this]{schedule();});
         connect(w,&Window::interactiveMoveResizeStarted,this,[this,w]{if(w->isInteractiveResize()) resizing.insert(w);});
         connect(w,&Window::interactiveMoveResizeStepped,this,[this,w](const RectF &geometry){
-            if(!arranging && resizing.contains(w)) {rememberResize(w,geometry.size());schedule();}
+            // KWin can report the start before the operation counts as a resize; pick it up here too,
+            // otherwise the next arrange snaps the window back mid-drag.
+            if(!arranging && w->isInteractiveResize()) {resizing.insert(w);rememberResize(w,geometry.size());schedule();}
         });
-        connect(w,&Window::interactiveMoveResizeFinished,this,[this,w]{if(resizing.remove(w)) rememberResize(w,w->moveResizeGeometry().size());schedule();});
+        connect(w,&Window::interactiveMoveResizeFinished,this,[this,w]{if(resizing.remove(w)) {rememberResize(w,w->moveResizeGeometry().size());saveWidth(w);}schedule();});
         schedule();
     }
     void arrange() {
@@ -144,14 +159,20 @@ class Vela : public Plugin, public InputEventFilter {
             auto key=layoutKey(list.first());
             auto widths=Layout::sizes(columns.value(key),cols,area.width()-gap*(cols+1));
             auto heights=Layout::sizes(this->rows.value(key),rows,area.height()-gap*(rows+1));
-            if(scroll) for(int i=0;i<list.size();++i) widths[i]=scrollWidths.value(list[i],std::max(240.,area.width()*.65));
+            // A remembered width seeds each column once, so resizing one window never resizes
+            // other open windows of the same application.
+            if(scroll) for(int i=0;i<list.size();++i) {
+                if(!scrollWidths.contains(list[i])) scrollWidths[list[i]]=storedWidth(list[i],area);
+                widths[i]=scrollWidths[list[i]];
+            }
             QVector<double> xs(cols),ys(rows);
             double total=gap;
             for(int i=0;i<cols;++i) {xs[i]=total;total+=widths[i]+gap;}
             double y=gap;
             for(int i=0;i<rows;++i) {ys[i]=y;y+=heights[i]+gap;}
             int focus=std::max(0,int(list.indexOf(lastWindow)));
-            double offset=scroll ? std::clamp(xs[focus]-(area.width()-widths[focus])/2,0.,std::max(0.,total-area.width())) : 0;
+            // The focused column always sits in the middle of the screen, so new windows open centred.
+            double offset=scroll ? xs[focus]-(area.width()-widths[focus])/2 : 0;
             if(scroll) for(int i=0;i<list.size();++i) if(resizing.contains(list[i])) offset=area.x()+xs[i]-list[i]->moveResizeGeometry().x();
             for(int i=0;i<list.size();++i) {
                 auto w=list[i]; if(!floating.contains(w)) floating[w]=w->frameGeometry();
@@ -163,10 +184,10 @@ class Vela : public Plugin, public InputEventFilter {
         arranging=false;
     }
 public:
-    Vela() : InputEventFilter(InputFilterOrder::TabBox) {
-        if(qEnvironmentVariable("VELA_SESSION")!="1") return;
+    Vaela() : InputEventFilter(InputFilterOrder::TabBox) {
+        if(qEnvironmentVariable("VAELA_SESSION")!="1") return;
         input()->installInputEventFilter(this);
-        QDBusConnection::sessionBus().registerService("org.vela.Controller");
+        QDBusConnection::sessionBus().registerService("org.vaela.Controller");
         QDBusConnection::sessionBus().registerObject("/Controller",this,QDBusConnection::ExportAllSlots);
         connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;contextShown=false;target=nullptr;capturedKeys.clear();});
         hold.setTimerType(Qt::PreciseTimer);contextShow.setTimerType(Qt::PreciseTimer);contextHide.setTimerType(Qt::PreciseTimer);
@@ -177,8 +198,8 @@ public:
         connect(&contextHide,&QTimer::timeout,this,[this]{if(down && !locked()) dismissContext();});
         connect(&hold,&QTimer::timeout,this,[this]{if(down && !gesture.moved && !locked()) {dismissContext();radial=true;ui("radial",gesture.start);}});
         layoutTimer.setSingleShot(true); layoutTimer.setInterval(40);
-        connect(&layoutTimer,&QTimer::timeout,this,&Vela::arrange);
-        connect(workspace(),&Workspace::windowAdded,this,&Vela::watch);
+        connect(&layoutTimer,&QTimer::timeout,this,&Vaela::arrange);
+        connect(workspace(),&Workspace::windowAdded,this,&Vaela::watch);
         connect(workspace(),&Workspace::windowRemoved,this,[this](Window*w){windowOrder.removeAll(w);floating.remove(w);scrollWidths.remove(w);resizing.remove(w);schedule();});
         connect(workspace(),&Workspace::windowActivated,this,[this](Window *w){if(appWindow(w)) lastWindow=w;schedule();});
         lastWindow=workspace()->activeWindow();
@@ -186,18 +207,18 @@ public:
         connect(workspace(),&Workspace::currentActivityChanged,this,[this]{schedule();});
         for(auto w:workspace()->windows()) watch(w);
         shortcut("Quick Commands","F2",[this]{ui("commands");});
-        shortcut("Vela Settings","Meta+Ctrl+S",[this]{ui("settings");});
-        shortcut("Cycle Vela Layout","Meta+Ctrl+Space",[this]{action("cycle-layout");});
-        shortcut("Vela Radial Menu","Meta+Ctrl+R",[this]{ui("radial");});
+        shortcut("Vaela Settings","Meta+Ctrl+S",[this]{ui("settings");});
+        shortcut("Cycle Vaela Layout","Meta+Ctrl+Space",[this]{action("cycle-layout");});
+        shortcut("Vaela Radial Menu","Meta+Ctrl+R",[this]{ui("radial");});
         shortcut("Scroll to Previous Window","Meta+Alt+Left",[this]{action("focus-previous");});
-        shortcut("Widen Vela Window","Meta+Ctrl+Alt+Right",[this]{action("widen");});
-        shortcut("Narrow Vela Window","Meta+Ctrl+Alt+Left",[this]{action("narrow");});
-        shortcut("Grow Vela Row","Meta+Ctrl+Alt+Down",[this]{action("taller");});
-        shortcut("Shrink Vela Row","Meta+Ctrl+Alt+Up",[this]{action("shorter");});
+        shortcut("Widen Vaela Window","Meta+Ctrl+Alt+Right",[this]{action("widen");});
+        shortcut("Narrow Vaela Window","Meta+Ctrl+Alt+Left",[this]{action("narrow");});
+        shortcut("Grow Vaela Row","Meta+Ctrl+Alt+Down",[this]{action("taller");});
+        shortcut("Shrink Vaela Row","Meta+Ctrl+Alt+Up",[this]{action("shorter");});
         shortcut("Scroll to Next Window","Meta+Alt+Right",[this]{action("focus-next");});
     }
     bool keyboardKey(KeyboardKeyEvent *e) override {
-        if(qEnvironmentVariable("VELA_SESSION")!="1" || locked()) return false;
+        if(qEnvironmentVariable("VAELA_SESSION")!="1" || locked()) return false;
         if(e->state==KeyboardKeyState::Released) return capturedKeys.remove(e->nativeScanCode)>0;
         const auto command=columnShortcut(e->key,e->modifiers,mode()=="Auto Tiling",mode()=="Scrollable");
         if(command.isEmpty()) return capturedKeys.contains(e->nativeScanCode);
@@ -205,7 +226,7 @@ public:
         capturedKeys[e->nativeScanCode]=command;action(command);return true;
     }
     bool pointerButton(PointerButtonEvent *e) override {
-        if(qEnvironmentVariable("VELA_SESSION")!="1") return false;
+        if(qEnvironmentVariable("VAELA_SESSION")!="1") return false;
         if(locked()) {stopHold();down=false;radial=false;contextShown=false;return false;}
         if(e->button!=Qt::RightButton) return false;
         if(e->state==PointerButtonState::Pressed) {
@@ -239,10 +260,15 @@ public:
     bool pointerMotion(PointerMotionEvent *e) override {
         if(!down) return false;
         if(locked()) {down=false;stopHold();contextShown=false;return false;}
+        if(radial) {
+            // While the button is held KWin keeps the pointer on the pressed window, so the
+            // radial menu gets no hover events of its own; send it the position instead.
+            if(!hoverClock.isValid() || hoverClock.elapsed()>=16) {hoverClock.restart();ui("radial-hover",e->position);}
+            return false;
+        }
         gesture.update(e->position,std::clamp(KConfigGroup(config,"General").readEntry("Threshold",28),12,120));
-        if(gesture.moved && !radial) {stopHold();dismissContext();}
-        // The radial window needs pointer motion for hover selection.
-        return !radial;
+        if(gesture.moved) {stopHold();dismissContext();}
+        return true;
     }
 public Q_SLOTS:
     void reload() {config->reparseConfiguration();schedule();}
@@ -254,7 +280,7 @@ public Q_SLOTS:
             for(auto w:windowOrder) if(appWindow(w) && w->isOnDesktop(d) && w->isOnCurrentActivity()) windows.append(w->caption());
             desks.append(QJsonObject{{"id",int(d->x11DesktopNumber())},{"name",d->name()},{"mode",mode(d)},{"current",d==VirtualDesktopManager::self()->currentDesktop()},{"windows",windows}});
         }
-        return QString::fromUtf8(QJsonDocument(QJsonObject{{"version",QStringLiteral(VELA_VERSION)},{"mode",mode()},{"desktops",desks},{"activity",activity()}}).toJson(QJsonDocument::Compact));
+        return QString::fromUtf8(QJsonDocument(QJsonObject{{"version",QStringLiteral(VAELA_VERSION)},{"mode",mode()},{"desktops",desks},{"activity",activity()}}).toJson(QJsonDocument::Compact));
     }
     void setMode(const QString &value) {
         if(locked() || !QStringList{"Float","Auto Tiling","Scrollable"}.contains(value)) return;
@@ -283,7 +309,12 @@ public Q_SLOTS:
         } else if(name=="cycle-layout") {QStringList modes{"Float","Auto Tiling","Scrollable"};setMode(modes[(modes.indexOf(mode())+1)%3]);}
         else if(name=="focus-next" || name=="focus-previous") {
             QList<Window*> list; for(auto win:windowOrder) if(eligible(win) && win->output()==workspace()->activeOutput()) list.append(win);
-            if(!list.isEmpty()) workspace()->activateWindow(list[(std::max(0,int(list.indexOf(w)))+(name=="focus-next"?1:list.size()-1))%list.size()]);
+            if(!list.isEmpty()) {
+                int next=std::max(0,int(list.indexOf(w)))+(name=="focus-next"?1:-1);
+                // The Scrollable strip stops at its ends; the other layouts wrap around.
+                next=mode()=="Scrollable" ? std::clamp(next,0,int(list.size())-1) : (next+int(list.size()))%int(list.size());
+                workspace()->activateWindow(list[next]);
+            }
         } else if(name=="column-left" || name=="column-right") {
             if(mode()!="Scrollable" || !w || !eligible(w)) return;
             QList<Window*> list; for(auto win:windowOrder) if(eligible(win) && win->output()==w->output()) list.append(win);
@@ -298,7 +329,7 @@ public Q_SLOTS:
                 if(name=="widen" || name=="narrow") size.setWidth(std::max(120.,size.width()+(name=="widen"?80:-80)));
                 else size.setHeight(std::max(100.,size.height()+(name=="taller"?60:-60)));
                 if(mode()=="Float") {auto r=w->frameGeometry();r.setSize(size);w->moveResize(r);}
-                else {rememberResize(w,size);schedule();}
+                else {rememberResize(w,size);saveWidth(w);schedule();}
             }
             if(name=="close") w->closeWindow();
             if(name=="minimize") w->setMinimized(true);
@@ -308,9 +339,9 @@ public Q_SLOTS:
 };
 class Factory : public PluginFactory {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID PluginFactory_iid FILE "vela.json")
+    Q_PLUGIN_METADATA(IID PluginFactory_iid FILE "vaela.json")
     Q_INTERFACES(KWin::PluginFactory)
 public:
-    std::unique_ptr<Plugin> create() const override {return std::make_unique<Vela>();}
+    std::unique_ptr<Plugin> create() const override {return std::make_unique<Vaela>();}
 };
 #include "plugin.moc"

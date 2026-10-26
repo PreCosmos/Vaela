@@ -16,6 +16,10 @@ private Q_SLOTS:
         QCOMPARE(columnShortcut(Qt::Key_Left,Qt::MetaModifier|Qt::ControlModifier,false,true),QString("column-left"));
         QCOMPARE(columnShortcut(Qt::Key_Right,Qt::MetaModifier|Qt::ControlModifier,false,true),QString("column-right"));
         QVERIFY(columnShortcut(Qt::Key_Left,Qt::MetaModifier|Qt::ControlModifier,true,false).isEmpty());
+        QCOMPARE(columnShortcut(Qt::Key_Left,Qt::MetaModifier,false,true),QString("focus-previous"));
+        QCOMPARE(columnShortcut(Qt::Key_Right,Qt::MetaModifier,false,true),QString("focus-next"));
+        QVERIFY(columnShortcut(Qt::Key_Left,Qt::MetaModifier,true,false).isEmpty());
+        QVERIFY(columnShortcut(Qt::Key_Right,Qt::MetaModifier,false,false).isEmpty());
         QCOMPARE(QKeySequence("Meta++")[0].key(),Qt::Key_Plus);
         QCOMPARE(QKeySequence("Meta+-")[0].key(),Qt::Key_Minus);
         QCOMPARE(QKeySequence("Ctrl+Meta+Left")[0].keyboardModifiers(),Qt::KeyboardModifiers(Qt::ControlModifier|Qt::MetaModifier));

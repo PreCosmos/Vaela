@@ -3,13 +3,13 @@
     "KPlugin": {
         "Authors": [
             {
-                "Name": "Vela contributors"
+                "Name": "Vaela contributors"
             }
         ],
-        "Description": "Defaults and first-login layout for the Vela desktop",
-        "Id": "org.vela.desktop",
+        "Description": "Defaults and first-login layout for the Vaela desktop",
+        "Id": "org.vaela.desktop",
         "License": "GPL-2.0-or-later",
-        "Name": "Vela",
+        "Name": "Vaela",
         "Version": "0.1.0"
     },
     "X-Plasma-APIVersion": "2"

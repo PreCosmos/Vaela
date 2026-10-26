@@ -1,0 +1,24 @@
+#!/bin/sh
+# Start a Vaela session: Plasma's Wayland session with Vaela's config defaults layered
+# under the user's own ~/.config. startplasma-wayland keeps XDG_CONFIG_DIRS and puts
+# its kdedefaults directory in front of it.
+
+config="${XDG_CONFIG_HOME:-$HOME/.config}"
+data="${XDG_DATA_HOME:-$HOME/.local/share}"
+
+# One-time carry-over from the pre-0.5 "Vela" names; the old files are left in place.
+if [ -f "$config/velarc" ] && [ ! -e "$config/vaelarc" ]; then
+    # Imported radial menu images are referenced by absolute path.
+    sed 's#/vela-shell/radial-icons/#/vaela-shell/radial-icons/#g' "$config/velarc" > "$config/vaelarc"
+    if [ -d "$data/vela-shell" ] && [ ! -e "$data/vaela-shell" ]; then
+        cp -a "$data/vela-shell" "$data/vaela-shell"
+    fi
+fi
+if [ "$(kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage)" = org.vela.desktop ]; then
+    kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.vaela.desktop
+fi
+
+export VAELA_SESSION=1
+export XDG_CONFIG_DIRS="@VAELA_DATADIR@/xdg:${XDG_CONFIG_DIRS:-/etc/xdg}"
+
+exec /usr/bin/startplasma-wayland "$@"

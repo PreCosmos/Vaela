@@ -72,7 +72,7 @@ QString RadialMenu::importIcon(const QString &value) {
     if(QFileInfo(icon).absolutePath()==directory) return icon;
     QDir().mkpath(directory);
     QString destination=directory+"/"+QUuid::createUuid().toString(QUuid::WithoutBraces)+"."+QFileInfo(icon).suffix();
-    if(!QFile::copy(icon,destination)) {fail("Could not copy the image into your Vela data directory.");return {};}
+    if(!QFile::copy(icon,destination)) {fail("Could not copy the image into your Vaela data directory.");return {};}
     return destination;
 }
 void RadialMenu::refreshApplications() {
