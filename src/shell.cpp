@@ -164,10 +164,12 @@ for (const d of desktops()) {
         }
     }
     // Places a shell window: the layout switch and workspace bar on the named monitor, overlays
-    // centred on x,y. For overlays, returns the top-left corner it got in global coordinates.
-    Q_INVOKABLE QPoint layer(QQuickWindow *window, QString kind, int x=0,int y=0, QString screen={}) {
+    // centred on x,y. Overlay coordinates are on the named monitor, whose size KWin passes along;
+    // without a name they are global and Qt picks the monitor. For overlays, returns where the
+    // top-left corner went on its monitor, with the monitor's name and size.
+    Q_INVOKABLE QVariantMap layer(QQuickWindow *window, QString kind, int x=0,int y=0, QString screen={}, int width=0, int height=0) {
         auto layer=LayerShellQt::Window::get(window);
-        if(auto target=screenNamed(screen)) {window->setScreen(target);layer->setScreen(target);}
+        if(kind!="overlay") if(auto target=screenNamed(screen)) {window->setScreen(target);layer->setScreen(target);}
         // The layout switch opens over Plasma's top bar, which already reserves the space.
         layer->setLayer(kind=="top" ? LayerShellQt::Window::LayerOverlay : LayerShellQt::Window::LayerTop);
         layer->setExclusiveZone(0);
@@ -180,22 +182,31 @@ for (const d of desktops()) {
         }
         else if(kind=="tabs") layer->setAnchors(LayerShellQt::Window::AnchorRight);
         else {
-            auto screen=QGuiApplication::screenAt(QPoint(x,y));if(!screen) screen=QGuiApplication::screenAt(QCursor::pos());if(!screen) screen=QGuiApplication::primaryScreen();
-            window->setScreen(screen);layer->setScreen(screen);
-            // Layer-shell placement is relative to the chosen output, including negative-origin monitors.
-            auto r=screen->geometry();
-            int left=std::clamp(x-r.x()-window->width()/2,0,std::max(0,r.width()-window->width()));
-            int top=std::clamp(y-r.y()-window->height()/2,34,std::max(34,r.height()-window->height()));
+            auto target=screenNamed(screen);
+            if(!target) {
+                if(screen.isEmpty()) target=QGuiApplication::screenAt(QPoint(x,y));
+                if(!target) target=QGuiApplication::screenAt(QCursor::pos());
+                if(!target) target=QGuiApplication::primaryScreen();
+                if(screen.isEmpty()) {x-=target->geometry().x();y-=target->geometry().y();}
+            }
+            window->setScreen(target);layer->setScreen(target);
+            // Layer-shell margins are relative to the monitor, in KWin's units for it.
+            const QSize area=width>0 && height>0 ? QSize(width,height) : target->geometry().size();
+            int left=std::clamp(x-window->width()/2,0,std::max(0,area.width()-window->width()));
+            int top=std::clamp(y-window->height()/2,34,std::max(34,area.height()-window->height()));
             layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop)|LayerShellQt::Window::AnchorLeft);
             layer->setMargins(QMargins(left,top,0,0));
-            return {r.x()+left,r.y()+top};
+            return {{"x",left},{"y",top},{"screen",target->name()},{"width",area.width()},{"height",area.height()}};
         }
         return {};
     }
 public Q_SLOTS:
-    void showView(QString view,int x,int y) {
+    // x and y are global here, as scripts and older plugins send them.
+    void showView(QString view,int x,int y) {showViewOn(view,{},x,y,0,0);}
+    // x and y are on the named monitor, which is width by height.
+    void showViewOn(QString view,QString screen,int x,int y,int width,int height) {
         if(QStringList{"terminal","files","browser","activities","screenshot"}.contains(view)) launch(view);
-        else emit requested(view,x,y);
+        else emit requested(view,x,y,screen,width,height);
     }
     // From the KWin plugin after recording or setting a shortcut; clash names who else has the keys.
     void shortcutChanged(QString id,QString keys,QString clash) {emit shortcutResult(id,keys,clash);refresh();}
@@ -228,7 +239,7 @@ public Q_SLOTS:
     }
 Q_SIGNALS:
     void changed();
-    void requested(QString view,int x,int y);
+    void requested(QString view,int x,int y,QString screen,int width,int height);
     void shortcutResult(QString id,QString keys,QString clash);
     void screensChanged();
 };
@@ -240,6 +251,7 @@ public:
     explicit ShellAdaptor(Bridge *bridge) : QDBusAbstractAdaptor(bridge),bridge(bridge) {}
 public Q_SLOTS:
     void showView(const QString &view,int x,int y) {bridge->showView(view,x,y);}
+    void showViewOn(const QString &view,const QString &screen,int x,int y,int width,int height) {bridge->showViewOn(view,screen,x,y,width,height);}
     void shortcutChanged(const QString &id,const QString &keys,const QString &clash) {bridge->shortcutChanged(id,keys,clash);}
     // Scriptable too: qdbus org.vaela.Shell /Shell setBackground 2 file:///path/video.webm
     void setBackground(int desktop,const QString &url) {bridge->setBackground(desktop,url);}

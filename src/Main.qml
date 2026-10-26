@@ -61,13 +61,13 @@ QtObject {
     }
     function fileName(url) {return url ? decodeURIComponent(String(url).replace(/\/$/, "").split("/").pop()) : ""}
     // Opens Settings with the file picker for one workspace's background.
-    function chooseBackground(desktop,x,y) {
-        open("settings",x,y)
+    function chooseBackground(desktop,screen,x,y) {
+        open("settings",x,y,screen)
         backgroundPicker.desktop=desktop
         backgroundPicker.open()
     }
     // Opens a view in the middle of the overlay as last shown, so it stays on that monitor.
-    function reopen(view) {open(view,overlay.originX+overlay.width/2,overlay.originY+overlay.height/2)}
+    function reopen(view) {open(view,overlay.originX+overlay.width/2,overlay.originY+overlay.height/2,overlay.screenName,overlay.areaWidth,overlay.areaHeight)}
     function run(action) {
         overlay.hide()
         if (action === "settings" || action === "commands") reopen(action)
@@ -84,9 +84,10 @@ QtObject {
         if(!count || distance<72 || distance>214) return -1
         return Math.round((Math.atan2(dx,-dy)+2*Math.PI)/(2*Math.PI/count))%count
     }
-    function open(view,x,y) {
+    // x and y are on the named screen when there is one (the KWin plugin always names it), global otherwise.
+    function open(view,x,y,screen,width,height) {
         if(view === "dismiss") {overlay.hide();return}
-        // While the right button is held, the KWin plugin reports the pointer in global coordinates.
+        // While the right button is held, the KWin plugin reports the pointer on the radial menu's monitor.
         if(view === "radial-hover" || view === "radial-release") {
             if(!overlay.visible || overlay.view !== "radial") return
             overlay.hot=radialHot(x-overlay.originX,y-overlay.originY)
@@ -98,8 +99,9 @@ QtObject {
         if(view === "radial-settings") radialEditor.page="menu"
         overlay.width=view === "radial" ? 440 : view === "commands" ? 600 : 680
         overlay.height=view === "radial" ? 440 : view === "commands" ? 520 : 660
-        let origin=vaela.layer(overlay,"overlay",x,y)
-        overlay.originX=origin.x; overlay.originY=origin.y
+        const placed=vaela.layer(overlay,"overlay",x,y,screen || "",width || 0,height || 0)
+        overlay.originX=placed.x; overlay.originY=placed.y
+        overlay.screenName=placed.screen; overlay.areaWidth=placed.width; overlay.areaHeight=placed.height
         overlay.show(); overlay.requestActivate()
         if(view === "commands") search.forceActiveFocus()
     }
@@ -111,7 +113,7 @@ QtObject {
     }
     property Connections bridge: Connections {
         target: vaela
-        function onRequested(view,x,y) {root.open(view,x,y)}
+        function onRequested(view,x,y,screen,width,height) {root.open(view,x,y,screen,width,height)}
         function onChanged() { if(!vaela.state.mode) overlay.hide() }
         function onShortcutResult(id,keys,clash) {
             if(id !== overlay.recording && (!overlay.clash || id !== overlay.clash.id)) return
@@ -252,8 +254,8 @@ QtObject {
                         }
                     }
                     Rectangle {width: 1; height: 16; color: Theme.border; Layout.leftMargin: 4; Layout.rightMargin: 4}
-                    VButton {iconName: "search"; flat: true; implicitWidth: 28; implicitHeight: 24; Accessible.name: "Quick Commands"; onClicked: root.open("commands",Screen.virtualX+Screen.width/2,Screen.virtualY+Screen.height/2)}
-                    VButton {iconName: "configure"; flat: true; implicitWidth: 28; implicitHeight: 24; Accessible.name: "Vaela Settings"; onClicked: root.open("settings",Screen.virtualX+Screen.width/2,Screen.virtualY+Screen.height/2)}
+                    VButton {iconName: "search"; flat: true; implicitWidth: 28; implicitHeight: 24; Accessible.name: "Quick Commands"; onClicked: root.open("commands",Screen.width/2,Screen.height/2,topWindow.modelData)}
+                    VButton {iconName: "configure"; flat: true; implicitWidth: 28; implicitHeight: 24; Accessible.name: "Vaela Settings"; onClicked: root.open("settings",Screen.width/2,Screen.height/2,topWindow.modelData)}
                 }
             }
         }
@@ -341,7 +343,7 @@ QtObject {
                                         onOpened:++tabsWindow.openMenus
                                         onClosed:{--tabsWindow.openMenus;collapse.restart()}
                                         MenuItem {text:"Rename…"; onTriggered:{rename.workspaceId=tab.modelData.id;renameName.text=tab.modelData.name;rename.open();tabsWindow.requestActivate();renameName.forceActiveFocus()}}
-                                        MenuItem {text:"Background…"; onTriggered:root.chooseBackground(tab.modelData.id,Screen.virtualX+Screen.width/2,Screen.virtualY+Screen.height/2)}
+                                        MenuItem {text:"Background…"; onTriggered:root.chooseBackground(tab.modelData.id,tabsWindow.modelData,Screen.width/2,Screen.height/2)}
                                         MenuItem {text:"Remove background"; visible:!!tab.modelData.background; height:visible ? implicitHeight : 0; onTriggered:vaela.setBackground(tab.modelData.id,"")}
                                         MenuItem {text:"Remove workspace"; enabled:(vaela.state.desktops || []).length>1; onTriggered:vaela.call("removeDesktop",[tab.modelData.id])}
                                     }
@@ -369,8 +371,12 @@ QtObject {
         property int hot: -1
         property int radialPage: 0
         property double shownAt: 0
+        // Where the overlay sits: its top-left corner on its monitor, and that monitor's name and size.
         property int originX: 0
         property int originY: 0
+        property string screenName: ""
+        property int areaWidth: 0
+        property int areaHeight: 0
         property string recording: ""   // shortcut waiting for keys
         property int backgroundTarget: 0  // workspace whose background options Settings shows; 0 is the current one
         property var clash: null        // {id, keys, by}: keys that something else already uses

@@ -41,6 +41,7 @@ class Vaela : public Plugin, public InputEventFilter {
     QElapsedTimer hoverClock;
     Gesture gesture;
     QPointer<Window> target, lastWindow;
+    QPointer<LogicalOutput> radialOutput; // where a held right button opened the radial menu
     bool down = false, radial = false, arranging = false;
     QHash<Window *, RectF> floating;
     QHash<Window *, double> scrollWidths;
@@ -64,11 +65,12 @@ class Vaela : public Plugin, public InputEventFilter {
         if(std::none_of(order.begin(),order.end(),[&](LogicalOutput *o){return names.contains(o->name());})) return output==order.first();
         return names.contains(output->name());
     }
-    // Where views opened from the keyboard appear: the active monitor, if Vaela runs there.
-    QPointF home() const {
-        auto output=workspace()->activeOutput();
-        if(!covers(output)) for(auto o:workspace()->outputOrder()) if(covers(o)) {output=o;break;}
-        return output ? output->geometryF().center() : QPointF();
+    // The monitor for views opened from the keyboard: the one under the pointer if Vaela runs
+    // there, else the active one, else the first Vaela covers.
+    LogicalOutput *homeOutput() const {
+        for(auto o:{workspace()->outputAt(input()->pointer()->pos()),workspace()->activeOutput()}) if(covers(o)) return o;
+        for(auto o:workspace()->outputOrder()) if(covers(o)) return o;
+        return nullptr;
     }
     void rememberResize(Window *w, QSizeF requested = {}) {
         if(!eligible(w) || mode()=="Float" || !covers(w->output())) return;
@@ -111,9 +113,21 @@ class Vaela : public Plugin, public InputEventFilter {
         auto m=QDBusMessage::createMethodCall("org.vaela.Shell", "/Shell", "org.vaela.Shell", method);
         m.setArguments(args); QDBusConnection::sessionBus().asyncCall(m);
     }
-    void ui(QString view, QPointF pos = {}) {
-        if(pos.isNull()) pos=home();
-        shell("showView",{view,int(pos.x()),int(pos.y())});
+    // Shows a shell view at pos, or without one on homeOutput(): the radial menu at the pointer,
+    // other views in the middle. The shell gets the monitor's name and a position on it, so it
+    // never maps KWin's global coordinates onto Qt's idea of where each screen is, which can
+    // disagree when monitors have different sizes or scales.
+    void ui(QString view, QPointF pos = {}, LogicalOutput *output = nullptr) {
+        if(pos.isNull()) {
+            output=homeOutput();
+            if(!output) return;
+            const auto pointer=input()->pointer()->pos();
+            pos=view=="radial" && workspace()->outputAt(pointer)==output ? pointer : output->geometryF().center();
+        }
+        if(!output) output=workspace()->outputAt(pos);
+        if(!output) return;
+        const auto area=output->geometryF();
+        shell("showViewOn",{view,output->name(),int(pos.x()-area.x()),int(pos.y()-area.y()),int(area.width()),int(area.height())});
     }
     void stopHold() {hold.stop();}
     void contextClick() {
@@ -306,7 +320,7 @@ public:
         // A still right-button hold opens the radial menu; a quick click becomes the app's context click on release.
         hold.setTimerType(Qt::PreciseTimer);
         hold.setSingleShot(true);
-        connect(&hold,&QTimer::timeout,this,[this]{if(down && !gesture.moved && !locked()) {radial=true;ui("radial",gesture.start);}});
+        connect(&hold,&QTimer::timeout,this,[this]{if(down && !gesture.moved && !locked()) {radial=true;radialOutput=workspace()->outputAt(gesture.start);ui("radial",gesture.start,radialOutput);}});
         layoutTimer.setSingleShot(true); layoutTimer.setInterval(40);
         connect(&layoutTimer,&QTimer::timeout,this,&Vaela::arrange);
         connect(workspace(),&Workspace::windowAdded,this,&Vaela::watch);
@@ -371,7 +385,7 @@ public:
         }
         if(!down) return false;
         down=false;stopHold();
-        if(radial) {radial=false; ui("radial-release",e->position);return true;}
+        if(radial) {radial=false; ui("radial-release",e->position,radialOutput);return true;}
         if(!gesture.directions.isEmpty()) {
             static const QHash<QString,QString> actions={{"L","previous"},{"R","next"},{"U","maximize"},{"D","close"},{"DR","close"},{"UD","cycle-layout"},{"DU","terminal"},{"UL","activities"},{"UR","commands"},{"RU","send-next"},{"LU","send-previous"}};
             action(KConfigGroup(config,"Bindings").readEntry(gesture.directions,actions.value(gesture.directions)));
@@ -387,7 +401,7 @@ public:
         if(radial) {
             // While the button is held KWin keeps the pointer on the pressed window, so the
             // radial menu gets no hover events of its own; send it the position instead.
-            if(!hoverClock.isValid() || hoverClock.elapsed()>=16) {hoverClock.restart();ui("radial-hover",e->position);}
+            if(!hoverClock.isValid() || hoverClock.elapsed()>=16) {hoverClock.restart();ui("radial-hover",e->position,radialOutput);}
             return false;
         }
         gesture.update(e->position,std::clamp(KConfigGroup(config,"General").readEntry("Threshold",28),12,120));

@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.1.0
+Version:        1.1.1
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -85,6 +85,12 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Tue Oct 27 2026 Vaela contributors - 1.1.1-1
+- Open the radial menu at the pointer on whichever monitor it is on, as long as
+  Vaela runs there, from the right button or Meta+Ctrl+M. Vaela's views are now
+  placed by monitor name, so they no longer land on the wrong monitor when
+  monitors differ in size or scale.
+
 * Mon Oct 26 2026 Vaela contributors - 1.1.0-1
 - Play background sound on Plasma's default output and follow it when it changes,
   for example to headphones; it used to stay on the device that was the default

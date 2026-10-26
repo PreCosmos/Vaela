@@ -64,6 +64,13 @@ public Q_SLOTS:
         input()->keyboard()->processKey(KEY_ENTER,KeyboardKeyState::Pressed,now());
         input()->keyboard()->processKey(KEY_ENTER,KeyboardKeyState::Released,now());
     }
+    // Shell surfaces have no caption; find one by its size instead.
+    QString sized(int width,int height) {
+        for(auto w:workspace()->stackingOrder()) if(w->isShown() && int(w->frameGeometry().width())==width && int(w->frameGeometry().height())==height) {
+            auto r=w->frameGeometry();return QString::fromUtf8(QJsonDocument(QJsonObject{{"x",r.x()},{"y",r.y()},{"w",r.width()},{"h",r.height()}}).toJson(QJsonDocument::Compact));
+        }
+        return "{}";
+    }
     QString geometry(const QString &caption) {
         for(auto w:workspace()->windows()) if(w->caption()==caption) {
             auto r=w->frameGeometry();return QString::fromUtf8(QJsonDocument(QJsonObject{{"x",r.x()},{"y",r.y()},{"w",r.width()},{"h",r.height()}}).toJson(QJsonDocument::Compact));

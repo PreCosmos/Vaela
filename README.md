@@ -56,19 +56,19 @@ Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 4
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 
 ```bash
-rpm-ostree install ./vaela-desktop-1.1.0-1.fc45.x86_64.rpm
+rpm-ostree install ./vaela-desktop-1.1.1-1.fc45.x86_64.rpm
 ```
 
 Replacing an earlier local build (including the old `vela-desktop` package):
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.1.0-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.1.1-1.fc45.x86_64.rpm
 ```
 
 **Fedora Workstation**
 
 ```bash
-sudo dnf install ./vaela-desktop-1.1.0-1.fc45.x86_64.rpm
+sudo dnf install ./vaela-desktop-1.1.1-1.fc45.x86_64.rpm
 ```
 
 Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so
@@ -113,7 +113,8 @@ menu as usual, when you release the button.
 Keep holding, move onto an item (it grows and the centre reads *Release to open*)
 and release the button. Releasing over the centre keeps the menu open so you can
 pick an item with a left click instead. **Escape** closes it. **Meta+Ctrl+M** opens
-it from the keyboard.
+it at the pointer from the keyboard (on a monitor Vaela does not run on, it opens on
+one it does).
 
 ### Mouse gestures
 
