@@ -282,9 +282,6 @@ Run the tests, including a private software-rendered KWin session:
 - Each build is tied to one KWin version and has to be rebuilt after KWin updates.
 - The workspace bar shows window titles; live thumbnails and workspace stacks are
   not done yet.
-- On a Fedora Atomic system rebased from a GNOME image, the new image's system
-  accounts may lack `/etc/shadow` entries, which stops Plasma's login manager.
-  This comes from the rebase, not from Vaela.
 
 ## License
 
