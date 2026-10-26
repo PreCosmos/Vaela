@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -81,6 +81,14 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Mon Oct 26 2026 Vaela contributors - 0.6.0-1
+- Build for Fedora 44 as well as Fedora 45.
+- Open the radial menu after a half-second hold. A quick right-click opens the
+  application's context menu on release; no menu flashes open during the hold.
+- Remove the timed context-menu dismissal, which could crash KWin.
+- Move the layout switch to the top edge, left of the corner, clear of a maximized
+  window's close button.
+
 * Mon Oct 26 2026 Vaela contributors - 0.5.0-1
 - Rename Vela to Vaela; carry over velarc, radial menu images and the look-and-feel choice.
 - Start the shell from /etc/xdg/autostart and detect the session through the KWin

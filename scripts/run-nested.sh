@@ -5,11 +5,13 @@
 #   --size WxH  window size (default 1600x900)
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/fedora.sh
 if [ ! -e /run/.containerenv ]; then
   # Numeric UID also works when distrobox's named-user lookup is unavailable.
-  podman start vela-dev >/dev/null
-  exec podman exec -u "$(id -u)" -e XDG_RUNTIME_DIR -e WAYLAND_DISPLAY -e DISPLAY \
-    -e LANG -e QT_QPA_PLATFORM=wayland vela-dev "$PWD/scripts/run-nested.sh" "$@"
+  podman start "$CONTAINER" >/dev/null
+  for _ in $(seq 100); do podman exec "$CONTAINER" test -e "$PWD/scripts/run-nested.sh" && break; sleep .3; done
+  exec podman exec -u "$(id -u)" -e FEDORA -e XDG_RUNTIME_DIR -e WAYLAND_DISPLAY -e DISPLAY \
+    -e LANG -e QT_QPA_PLATFORM=wayland "$CONTAINER" "$PWD/scripts/run-nested.sh" "$@"
 fi
 
 SIZE=1600x900
@@ -24,14 +26,14 @@ while [ $# -gt 0 ]; do
 done
 
 ROOT="$PWD"
-STAGE="$ROOT/build/stage"
+STAGE="$ROOT/build/stage$SUFFIX"
 TEST_HOME="$ROOT/build/nested-home"
 
-cmake -S . -B build/nested -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib64 \
+cmake -S . -B "build/nested$SUFFIX" -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib64 \
       -DPLASMA_DBUS_HELPER=/usr/libexec/plasma-dbus-run-session-if-needed >/dev/null
-cmake --build build/nested --parallel
+cmake --build "build/nested$SUFFIX" --parallel
 rm -rf "$STAGE"
-DESTDIR="$STAGE" cmake --install build/nested >/dev/null
+DESTDIR="$STAGE" cmake --install "build/nested$SUFFIX" >/dev/null
 
 [ "$FRESH" = 1 ] && rm -rf "$TEST_HOME"
 mkdir -p "$TEST_HOME"/{config,data,cache,state}

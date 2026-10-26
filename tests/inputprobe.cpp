@@ -73,11 +73,13 @@ public Q_SLOTS:
     bool workspaceBar(bool click,int number) {
         for(auto w:workspace()->windows()) {
             auto r=w->frameGeometry();
-            if(w->inherits("KWin::LayerShellV1Window") && r.width()<=220 && r.height()>=120 && w->isShown()) {
+            if(w->inherits("KWin::LayerShellV1Window") && r.width()<=300 && r.height()>=120 && w->isShown()) {
                 if(!click) motion(r.right()-2,r.center().y());
                 else {
                     if(r.width()<200) return false;
-                    motion(r.x()+70,r.y()+6+35+(number-1)*76);button(272,true);button(272,false);
+                    // Main.qml's bar: 10 px panel margin + 10 px padding, a ~20 px header and 8 px
+                    // spacing, then 60 px tabs 6 px apart. Click the name, clear of the ⋮ button.
+                    motion(r.x()+80,r.y()+78+(number-1)*66);button(272,true);button(272,false);
                 }
                 return true;
             }

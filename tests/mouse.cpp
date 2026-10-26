@@ -63,13 +63,18 @@ private Q_SLOTS:
         QCOMPARE(s["mode"].toString(),QString("Scrollable"));
         controller.call("setMode","Float");controller.call("desktop",1);controller.call("setMode","Float");QTest::qWait(150);
     }
-    void contextMenuAndRadialTiming() {
+    void quickClickAndRadialHold() {
         QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
-        button(true);QTest::qWait(180);QCOMPARE(window.shown,0);
-        QTRY_COMPARE_WITH_TIMEOUT(window.shown,1,400);
-        QTRY_COMPARE_WITH_TIMEOUT(window.hidden,1,600);
+        // A quick right-click reaches the application as its own context click, on release.
+        button(true);QTest::qWait(120);QCOMPARE(window.shown,0);button(false);
+        QTRY_COMPARE_WITH_TIMEOUT(window.shown,1,600);
+        window.menu.hide();QTRY_COMPARE_WITH_TIMEOUT(window.hidden,1,600);
+        // Holding still opens the radial menu at 0.5 s, with no context menu on the way.
+        QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
+        button(true);QTest::qWait(300);
         QVERIFY(!probe.call("radialVisible").arguments().first().toBool());
         QTRY_VERIFY_WITH_TIMEOUT(probe.call("radialVisible").arguments().first().toBool(),600);
+        QCOMPARE(window.shown,1);
         button(false);
         // Dismiss the overlay through a normal view change before testing hover targeting.
         QDBusInterface shell("org.vaela.Shell","/Shell","org.vaela.Shell");shell.call("showView","dismiss",0,0);

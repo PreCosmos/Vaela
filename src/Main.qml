@@ -131,12 +131,13 @@ QtObject {
         Text {id: capText; anchors.centerIn: parent; color: Theme.text; font.pixelSize: 12; font.family: "monospace"}
     }
 
-    // Layout switch: a thin handle at the right end of the top bar until the pointer reaches it.
+    // Layout switch: a short handle on the top edge, set in from the right (see Bridge::layer) so it
+    // stays clear of a maximized window's close button, until the pointer reaches it.
     property Window top: Window {
         id: topWindow
         property bool expanded:false
-        width: expanded ? switchPanel.implicitWidth + 8 : 10
-        height: 34; color: "transparent"
+        width: expanded ? switchPanel.implicitWidth + 8 : 160
+        height: expanded ? 38 : 6; color: "transparent"
         visible: !!vaela.state.mode
         flags: Qt.FramelessWindowHint
         Component.onCompleted: {root.applyPalette(topWindow);vaela.layer(topWindow,"top")}
@@ -147,13 +148,13 @@ QtObject {
         Timer {id:topCollapse;interval:300;onTriggered:if(!topHover.hovered) topWindow.expanded=false}
         Rectangle {
             visible: !topWindow.expanded
-            anchors {right: parent.right; rightMargin: 3; verticalCenter: parent.verticalCenter}
-            width: 4; height: 20; radius: 2; color: Theme.accent; opacity: 0.9
+            anchors {top: parent.top; topMargin: 1; horizontalCenter: parent.horizontalCenter}
+            width: 56; height: 4; radius: 2; color: Theme.accent; opacity: 0.9
         }
         Rectangle {
             id: switchPanel
             visible: topWindow.expanded
-            anchors {right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter}
+            anchors {right: parent.right; rightMargin: 4; top: parent.top; topMargin: 4}
             implicitWidth: switchRow.implicitWidth + 8
             width: implicitWidth; height: 30; radius: 10
             color: Theme.panel; border.color: Theme.border
@@ -403,7 +404,7 @@ QtObject {
                             }
                             Card {
                                 title: "Mouse gestures"
-                                subtitle: "Hold the right button for 1 second for the radial menu, move onto an item and release to open it. Draw with the right button for gestures. Shift + right-click skips both."
+                                subtitle: "Hold the right button still for half a second for the radial menu, move onto an item and release to open it. A quick right-click opens the app's own menu. Draw with the right button for gestures. Shift + right-click skips Vaela."
                                 SettingRow {
                                     label: "Right-button gestures and radial menu"
                                     Switch {checked: vaela.gestures; onToggled: vaela.setting("Gestures",checked)}

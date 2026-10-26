@@ -21,47 +21,53 @@ login screen.
   them, *Auto Tiling* arranges them in a grid, and *Scrollable* puts them in a
   horizontal strip of full-height columns with the focused one in the middle of
   the screen. Each workspace in each activity remembers its own layout.
-- **Radial menu.** Hold the right mouse button for one second, move onto an item
+- **Radial menu.** Hold the right mouse button for half a second, move onto an item
   and let go. Applications, shell commands and desktop actions, with your own
   images.
 - **Mouse gestures.** Draw with the right button to switch workspaces, close or
   maximize windows, open Quick Commands and more. Every stroke can be rebound.
 - **Workspace bar.** Push the pointer against the right edge for your workspaces
   as tabs, with each one's layout and window count.
-- **Layout switch.** Push the pointer into the top-right corner to change the
-  current workspace's layout.
+- **Layout switch.** Move the pointer to the top edge, just left of the top-right
+  corner, to change the current workspace's layout.
 - **Quick Commands** (F2) and **Vaela Settings** (Meta+Ctrl+S), with direct links
   to Plasma's pages for displays and HDR, sound, printers, power, keyboard,
   mouse, shortcuts and system information.
 
 ## Requirements
 
-- Fedora 45 or a Fedora Atomic image based on it (Bazzite, Kinoite, Silverblue), x86_64.
-- **KWin 6.7.5.** Vaela's KWin plugin uses KWin's internal interfaces, so each
-  Vaela build works only with the KWin version it was compiled against. The RPM
-  requires that exact version; after a KWin update, rebuild Vaela.
+- Fedora 44 or 45, or a Fedora Atomic image based on them (Bazzite, Kinoite, Silverblue), x86_64.
+- **KWin 6.7.5,** which both releases ship in their updates. Vaela's KWin plugin uses
+  KWin's internal interfaces, so each Vaela build works only with the KWin version it
+  was compiled against. The RPM requires that exact version; after a KWin update,
+  rebuild Vaela.
 
 ## Installing
 
-Build the RPM (see [Building](#building)) or download one from the [releases page](https://github.com/PreCosmos/Vaela/releases), then:
+Build the RPM (see [Building](#building)) or download one from the [releases page](https://github.com/PreCosmos/Vaela/releases).
+Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 44.
+`rpm -E %fedora` prints your release. The commands below use the Fedora 45 file.
 
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 
 ```bash
-rpm-ostree install ./vaela-desktop-0.5.0-1.fc45.x86_64.rpm
+rpm-ostree install ./vaela-desktop-0.6.0-1.fc45.x86_64.rpm
 ```
 
 Replacing an earlier local build (including the old `vela-desktop` package):
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./vaela-desktop-0.5.0-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-0.6.0-1.fc45.x86_64.rpm
 ```
 
 **Fedora Workstation**
 
 ```bash
-sudo dnf install ./vaela-desktop-0.5.0-1.fc45.x86_64.rpm
+sudo dnf install ./vaela-desktop-0.6.0-1.fc45.x86_64.rpm
 ```
+
+Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so
+it has KWin 6.7.5.
 
 Reboot (Atomic) or log out (Workstation), then choose **Vaela** in the session
 menu of the login screen. Installing pulls in KWin and the parts of Plasma that
@@ -73,8 +79,9 @@ To remove it: `rpm-ostree uninstall vaela-desktop`, or `sudo dnf remove vaela-de
 
 ### Layouts
 
-Push the pointer into the **top-right corner** of the screen. A thin coral handle
-there expands into the layout switch: **Float**, **Auto Tiling** or **Scrollable**.
+Move the pointer to the **top edge** of the screen, a little to the left of the
+top-right corner (which stays free for a maximized window's close button). A short
+coral handle there expands into the layout switch: **Float**, **Auto Tiling** or **Scrollable**.
 The magnifier opens Quick Commands and the gear opens Vaela Settings.
 
 - **Auto Tiling:** drag a window edge to resize; neighbours share the new boundary.
@@ -94,13 +101,9 @@ next or previous workspace.
 
 ### Radial menu
 
-Hold the **right mouse button** without moving:
-
-| Held for | What happens |
-|---|---|
-| 0.25 s | The application's own context menu opens |
-| 0.75 s | The context menu closes again |
-| 1 s | The radial menu opens around the pointer |
+Hold the **right mouse button** still for **half a second** and the radial menu
+opens around the pointer. A quicker right-click opens the application's own context
+menu as usual, when you release the button.
 
 Keep holding, move onto an item (it grows and the centre reads *Release to open*)
 and release the button. Releasing over the centre keeps the menu open so you can
@@ -163,11 +166,17 @@ Settings, gesture bindings, the radial menu and remembered column widths live in
 
 ## Building
 
-Everything builds in a Fedora 45 [distrobox](https://distrobox.it) named
-`vela-dev`, whose home is `.devbox/home` inside the checkout.
+Everything builds in a Fedora [distrobox](https://distrobox.it): `vela-dev` for
+Fedora 45, with its home in `.devbox/home` inside the checkout. Prefix any script
+with `FEDORA=44` to use a Fedora 44 container (`vela-dev-f44`, `.devbox/home-f44`)
+and build Fedora 44 RPMs instead.
 
 ```bash
 ./scripts/dev-container.sh
+```
+
+```bash
+FEDORA=44 ./scripts/dev-container.sh
 ```
 
 Build the RPM into `rpms/`:

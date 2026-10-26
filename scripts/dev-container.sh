@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Create the Fedora 45 distrobox used to build and test Vaela, or bring its packages up to date.
-# Its home lives in .devbox/home inside the repo, so build caches stay on this drive.
+# Create the Fedora distrobox used to build and test Vaela, or bring its packages up to date.
+# FEDORA=44 makes the Fedora 44 one (default 45). Its home lives in .devbox/ inside the
+# repo, so build caches stay on this drive.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/fedora.sh
 
-NAME=vela-dev
-IMAGE=registry.fedoraproject.org/fedora:45
-HOME_DIR="$PWD/.devbox/home"
+NAME=$CONTAINER
+IMAGE=registry.fedoraproject.org/fedora:$FEDORA
+HOME_DIR="$PWD/.devbox/home$SUFFIX"
 
 BUILD_PKGS=(
   kf6-kservice-devel kf6-kio-devel layer-shell-qt-devel plasma-activities-devel libepoxy-devel libdrm-devel vulkan-loader-devel

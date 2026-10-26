@@ -84,12 +84,16 @@ public:
     // Places a shell window; for overlays, returns the top-left corner it got in global coordinates.
     Q_INVOKABLE QPoint layer(QQuickWindow *window, QString kind, int x=0,int y=0) {
         auto layer=LayerShellQt::Window::get(window);
-        // The layout switch opens over the right end of Plasma's top bar, which already reserves the space.
+        // The layout switch opens over Plasma's top bar, which already reserves the space.
         layer->setLayer(kind=="top" ? LayerShellQt::Window::LayerOverlay : LayerShellQt::Window::LayerTop);
         layer->setExclusiveZone(0);
         if(kind=="tabs") layer->setActivateOnShow(false);
         layer->setKeyboardInteractivity(kind=="overlay" ? LayerShellQt::Window::KeyboardInteractivityExclusive : kind=="tabs" ? LayerShellQt::Window::KeyboardInteractivityOnDemand : LayerShellQt::Window::KeyboardInteractivityNone);
-        if(kind=="top") layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop)|LayerShellQt::Window::AnchorRight);
+        if(kind=="top") {
+            // Set in from the corner, which belongs to a maximized window's close button.
+            layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop)|LayerShellQt::Window::AnchorRight);
+            layer->setMargins(QMargins(0,0,150,0));
+        }
         else if(kind=="tabs") layer->setAnchors(LayerShellQt::Window::AnchorRight);
         else {
             auto screen=QGuiApplication::screenAt(QPoint(x,y));if(!screen) screen=QGuiApplication::screenAt(QCursor::pos());if(!screen) screen=QGuiApplication::primaryScreen();

@@ -12,8 +12,6 @@
 #include <virtualdesktops.h>
 #include <wayland_server.h>
 #include <wayland/seat.h>
-#include <wayland/display.h>
-#include <linux/input-event-codes.h>
 #include <activities.h>
 #include <KConfigGroup>
 #include <KSharedConfig>
@@ -35,11 +33,11 @@ class Vaela : public Plugin, public InputEventFilter {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.vaela.Controller")
     KSharedConfig::Ptr config = KSharedConfig::openConfig("vaelarc");
-    QTimer hold, contextShow, contextHide, layoutTimer;
+    QTimer hold, layoutTimer;
     QElapsedTimer hoverClock;
     Gesture gesture;
     QPointer<Window> target, lastWindow;
-    bool down = false, radial = false, contextShown = false, contextDelivered = false, arranging = false;
+    bool down = false, radial = false, arranging = false;
     QHash<Window *, RectF> floating;
     QHash<Window *, double> scrollWidths;
     QHash<QString, QVector<double>> columns, rows;
@@ -90,25 +88,11 @@ class Vaela : public Plugin, public InputEventFilter {
         auto m=QDBusMessage::createMethodCall("org.vaela.Shell", "/Shell", "org.vaela.Shell", "showView");
         m << view << int(pos.x()) << int(pos.y()); QDBusConnection::sessionBus().asyncCall(m);
     }
-    void stopHold() {hold.stop();contextShow.stop();contextHide.stop();}
+    void stopHold() {hold.stop();}
     void contextClick() {
         auto seat=waylandServer()->seat();
         seat->notifyPointerButton(Qt::RightButton,PointerButtonState::Pressed);seat->notifyPointerFrame();
         seat->notifyPointerButton(Qt::RightButton,PointerButtonState::Released);seat->notifyPointerFrame();
-        contextShown=true;contextDelivered=true;
-    }
-    void dismissContext() {
-        if(!contextShown) return;
-        bool dismissed=false;
-        const auto windows=workspace()->stackingOrder();
-        for(auto it=windows.crbegin();it!=windows.crend();++it) if((*it)->hasPopupGrab()) {(*it)->popupDone();dismissed=true;}
-        // Some applications draw their context menu inside the parent surface.
-        if(!dismissed) {
-            auto seat=waylandServer()->seat();
-            seat->notifyKeyboardKey(KEY_ESC,KeyboardKeyState::Pressed,waylandServer()->display()->nextSerial());
-            seat->notifyKeyboardKey(KEY_ESC,KeyboardKeyState::Released,waylandServer()->display()->nextSerial());
-        }
-        contextShown=false;
     }
     void shortcut(QString id, QString key, std::function<void()> fn) {
         auto a=new QAction(id,this); a->setObjectName(id); a->setProperty("componentName", "vaela");
@@ -189,14 +173,11 @@ public:
         input()->installInputEventFilter(this);
         QDBusConnection::sessionBus().registerService("org.vaela.Controller");
         QDBusConnection::sessionBus().registerObject("/Controller",this,QDBusConnection::ExportAllSlots);
-        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;contextShown=false;target=nullptr;capturedKeys.clear();});
-        hold.setTimerType(Qt::PreciseTimer);contextShow.setTimerType(Qt::PreciseTimer);contextHide.setTimerType(Qt::PreciseTimer);
-        hold.setSingleShot(true); hold.setInterval(1000);
-        contextShow.setSingleShot(true);contextShow.setInterval(250);
-        contextHide.setSingleShot(true);contextHide.setInterval(750);
-        connect(&contextShow,&QTimer::timeout,this,[this]{if(down && !gesture.moved && !locked()) contextClick();});
-        connect(&contextHide,&QTimer::timeout,this,[this]{if(down && !locked()) dismissContext();});
-        connect(&hold,&QTimer::timeout,this,[this]{if(down && !gesture.moved && !locked()) {dismissContext();radial=true;ui("radial",gesture.start);}});
+        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;target=nullptr;capturedKeys.clear();});
+        // A still right-button hold opens the radial menu; a quick click becomes the app's context click on release.
+        hold.setTimerType(Qt::PreciseTimer);
+        hold.setSingleShot(true); hold.setInterval(500);
+        connect(&hold,&QTimer::timeout,this,[this]{if(down && !gesture.moved && !locked()) {radial=true;ui("radial",gesture.start);}});
         layoutTimer.setSingleShot(true); layoutTimer.setInterval(40);
         connect(&layoutTimer,&QTimer::timeout,this,&Vaela::arrange);
         connect(workspace(),&Workspace::windowAdded,this,&Vaela::watch);
@@ -227,12 +208,12 @@ public:
     }
     bool pointerButton(PointerButtonEvent *e) override {
         if(qEnvironmentVariable("VAELA_SESSION")!="1") return false;
-        if(locked()) {stopHold();down=false;radial=false;contextShown=false;return false;}
+        if(locked()) {stopHold();down=false;radial=false;return false;}
         if(e->button!=Qt::RightButton) return false;
         if(e->state==PointerButtonState::Pressed) {
             config->reparseConfiguration();
             if(!KConfigGroup(config,"General").readEntry("Gestures",true) || e->modifiers.testFlag(Qt::ShiftModifier)) return false;
-            gesture.begin(e->position);down=true;radial=false;contextShown=false;contextDelivered=false;target=nullptr;
+            gesture.begin(e->position);down=true;radial=false;target=nullptr;
             auto stack=workspace()->stackingOrder();
             for(auto it=stack.crbegin();it!=stack.crend();++it) {
                 auto w=*it;
@@ -243,7 +224,7 @@ public:
                     break;
                 }
             }
-            hold.start();contextShow.start();contextHide.start();return true;
+            hold.start();return true;
         }
         if(!down) return false;
         down=false;stopHold();
@@ -253,13 +234,13 @@ public:
             action(KConfigGroup(config,"Bindings").readEntry(gesture.directions,actions.value(gesture.directions)));
         } else {
             // Send a balanced click without changing the physical button state in KWin.
-            if(!contextDelivered) contextClick();
+            contextClick();
         }
         target=nullptr; return true;
     }
     bool pointerMotion(PointerMotionEvent *e) override {
         if(!down) return false;
-        if(locked()) {down=false;stopHold();contextShown=false;return false;}
+        if(locked()) {down=false;stopHold();return false;}
         if(radial) {
             // While the button is held KWin keeps the pointer on the pressed window, so the
             // radial menu gets no hover events of its own; send it the position instead.
@@ -267,7 +248,7 @@ public:
             return false;
         }
         gesture.update(e->position,std::clamp(KConfigGroup(config,"General").readEntry("Threshold",28),12,120));
-        if(gesture.moved) {stopHold();dismissContext();}
+        if(gesture.moved) stopHold();
         return true;
     }
 public Q_SLOTS:

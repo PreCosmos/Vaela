@@ -2,13 +2,14 @@
 # Build and exercise Vaela in a private, software-rendered 1280x800 KWin session.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-[ -e /run/.containerenv ] || exec distrobox enter vela-dev -- "$PWD/scripts/test-headless.sh" "$@"
+. scripts/fedora.sh
+run_in_container test-headless.sh "$@"
 export LANG=C.UTF-8
-export VAELA_TEST_BUILD="$PWD/build/native"
+export VAELA_TEST_BUILD="$PWD/build/native$SUFFIX"
 cmake -S . -B "$VAELA_TEST_BUILD" -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib64
 cmake --build "$VAELA_TEST_BUILD" --parallel
 ctest --test-dir "$VAELA_TEST_BUILD" --output-on-failure
-stage="$PWD/build/test-stage"
+stage="$PWD/build/test-stage$SUFFIX"
 DESTDIR="$stage" cmake --install "$VAELA_TEST_BUILD"
 cp "$VAELA_TEST_BUILD/libvaela-input-probe.so" "$stage/usr/lib64/qt6/plugins/kwin/plugins/"
 scratch=$(mktemp -d)
