@@ -11,7 +11,9 @@
 #include <wayland_server.h>
 #include <wayland/seat.h>
 #include <QDBusConnection>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <core/output.h>
 #include <QJsonObject>
 #include <chrono>
 using namespace KWin;
@@ -63,6 +65,27 @@ public Q_SLOTS:
     void endResize() {
         input()->keyboard()->processKey(KEY_ENTER,KeyboardKeyState::Pressed,now());
         input()->keyboard()->processKey(KEY_ENTER,KeyboardKeyState::Released,now());
+    }
+    // Every application window, for layout checks.
+    QString windows() {
+        QJsonArray list;
+        for(auto w:workspace()->stackingOrder()) if(w->isNormalWindow() && !w->isInternal() && !w->inherits("KWin::LayerShellV1Window")) {
+            auto r=w->frameGeometry();
+            list.append(QJsonObject{{"caption",w->caption()},{"x",r.x()},{"y",r.y()},{"w",r.width()},{"h",r.height()},
+                                    {"output",w->output() ? w->output()->name() : QString()},{"active",w==workspace()->activeWindow()},
+                                    {"minimized",w->isMinimized()},{"shown",w->isShown()}});
+        }
+        return QString::fromUtf8(QJsonDocument(list).toJson(QJsonDocument::Compact));
+    }
+    // Each monitor's geometry and the area windows may use on it.
+    QString outputs() {
+        QJsonArray list;
+        for(auto o:workspace()->outputOrder()) {
+            auto g=o->geometryF(); auto a=workspace()->clientArea(MaximizeArea,o);
+            list.append(QJsonObject{{"name",o->name()},{"x",g.x()},{"y",g.y()},{"w",g.width()},{"h",g.height()},
+                                    {"ax",a.x()},{"ay",a.y()},{"aw",a.width()},{"ah",a.height()}});
+        }
+        return QString::fromUtf8(QJsonDocument(list).toJson(QJsonDocument::Compact));
     }
     // Shell surfaces have no caption; find one by its size instead.
     QString sized(int width,int height) {

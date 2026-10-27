@@ -45,14 +45,30 @@ class Vaela : public Plugin, public InputEventFilter {
     bool down = false, radial = false, arranging = false;
     QHash<Window *, RectF> floating;
     QHash<Window *, double> scrollWidths;
-    QHash<QString, QVector<double>> columns, rows;
-    QSet<Window *> resizing;
+    QHash<QString, QVector<double>> columns, rows, lastRows; // lastRows: an incomplete last row's own widths
+    QSet<Window *> resizing, moving;
+    // The monitor each window is tiled on. Scrollable layouts slide windows past the edge of
+    // their monitor, sometimes over another one, so this follows the user's moves, not geometry.
+    mutable QHash<Window *, QPointer<LogicalOutput>> homes;
+    QHash<LogicalOutput *, QPointer<Window>> focused; // the window each monitor's strip centres on
+    QHash<LogicalOutput *, int> focusIndex;            // and its place, for when it closes
+    QHash<Window *, QPointF> placed;                   // where arrange() last put each window
     QList<Window *> windowOrder;
     QHash<quint32,QString> capturedKeys;
     QList<QAction *> globals;
     QString recording; // the shortcut Vaela Settings waits to record from the next key press
-    QString layoutKey(Window *w) const {
-        return activity()+":"+VirtualDesktopManager::self()->currentDesktop()->id()+":"+QString::number(quintptr(w->output()),16);
+    QString layoutKey(LogicalOutput *output) const {
+        return activity()+":"+VirtualDesktopManager::self()->currentDesktop()->id()+":"+QString::number(quintptr(output),16);
+    }
+    // A window moved to another monitor joins its layout; the focused one becomes that strip's centre.
+    void rehome(Window *w, LogicalOutput *output) {
+        homes[w]=output;
+        if(w==workspace()->activeWindow()) focused[output]=w;
+    }
+    LogicalOutput *home(Window *w) const {
+        auto &output=homes[w];
+        if(!output || !workspace()->outputs().contains(output.data())) output=w->output();
+        return output;
     }
     // The monitors Vaela runs on: "primary" (the default), "all", or a comma-separated list of
     // output names. A list that names no connected monitor falls back to the primary one.
@@ -73,22 +89,25 @@ class Vaela : public Plugin, public InputEventFilter {
         return nullptr;
     }
     void rememberResize(Window *w, QSizeF requested = {}) {
-        if(!eligible(w) || mode()=="Float" || !covers(w->output())) return;
-        const QRectF area=workspace()->clientArea(MaximizeArea,w->output());
+        auto output=home(w);
+        if(!eligible(w) || mode()=="Float" || !covers(output)) return;
+        const QRectF area=workspace()->clientArea(MaximizeArea,output);
         if(!requested.isValid()) requested=w->frameGeometry().size();
         if(mode()=="Scrollable") {
             scrollWidths[w]=std::clamp(requested.width(),120.,area.width()*2);
             return;
         }
         QList<Window*> list;
-        for(auto win:windowOrder) if(eligible(win) && win->output()==w->output()) list.append(win);
+        for(auto win:windowOrder) if(eligible(win) && home(win)==output) list.append(win);
         int index=list.indexOf(w); if(index<0) return;
         int nc=int(std::ceil(std::sqrt(list.size()))), nr=(list.size()+nc-1)/nc;
+        const int last=list.size()-(nr-1)*nc;
         double gap=KConfigGroup(config,"General").readEntry("Gap",8);
-        auto key=layoutKey(w);
-        auto widths=Layout::sizes(columns.value(key),nc,area.width()-gap*(nc+1));
+        auto key=layoutKey(output);
         auto heights=Layout::sizes(rows.value(key),nr,area.height()-gap*(nr+1));
-        columns[key]=Layout::resize(widths,index%nc,requested.width(),120);
+        // Windows in an incomplete last row share that row's width among themselves.
+        if(index/nc==nr-1 && last<nc) lastRows[key]=Layout::resize(Layout::sizes(lastRows.value(key),last,area.width()-gap*(last+1)),index%nc,requested.width(),120);
+        else columns[key]=Layout::resize(Layout::sizes(columns.value(key),nc,area.width()-gap*(nc+1)),index%nc,requested.width(),120);
         rows[key]=Layout::resize(heights,index/nc,requested.height(),100);
     }
     QString appId(Window *w) const { auto id=w->desktopFileName(); return id.isEmpty() ? w->resourceClass() : id; }
@@ -99,7 +118,7 @@ class Vaela : public Plugin, public InputEventFilter {
     }
     void saveWidth(Window *w) {
         if(mode()!="Scrollable" || !scrollWidths.contains(w) || appId(w).isEmpty()) return;
-        const QRectF area=workspace()->clientArea(MaximizeArea,w->output());
+        const QRectF area=workspace()->clientArea(MaximizeArea,home(w));
         KConfigGroup(config,"ScrollableWidths").writeEntry(appId(w),scrollWidths[w]/area.width());config->sync();
     }
     QString activity() const { auto a=workspace()->activities(); return a && !a->current().isEmpty() ? a->current() : QStringLiteral("default"); }
@@ -235,33 +254,57 @@ class Vaela : public Plugin, public InputEventFilter {
         connect(w,&Window::fullScreenChanged,this,[this]{schedule();});
         connect(w,&Window::frameGeometryChanged,this,[this]{backgroundTimer.start();});
         connect(w,&Window::hiddenChanged,this,[this]{backgroundTimer.start();});
-        connect(w,&Window::interactiveMoveResizeStarted,this,[this,w]{if(w->isInteractiveResize()) resizing.insert(w);});
+        connect(w,&Window::interactiveMoveResizeStarted,this,[this,w]{
+            if(w->isInteractiveResize()) resizing.insert(w);
+            else if(w->isInteractiveMove()) moving.insert(w);
+        });
         connect(w,&Window::interactiveMoveResizeStepped,this,[this,w](const RectF &geometry){
             // KWin can report the start before the operation counts as a resize; pick it up here too,
             // otherwise the next arrange snaps the window back mid-drag.
             if(!arranging && w->isInteractiveResize()) {resizing.insert(w);rememberResize(w,geometry.size());schedule();}
         });
-        connect(w,&Window::interactiveMoveResizeFinished,this,[this,w]{if(resizing.remove(w)) {rememberResize(w,w->moveResizeGeometry().size());saveWidth(w);}schedule();});
+        connect(w,&Window::interactiveMoveResizeFinished,this,[this,w]{
+            if(resizing.remove(w)) {rememberResize(w,w->moveResizeGeometry().size());saveWidth(w);}
+            // A window dropped on another monitor joins that monitor's layout.
+            if(moving.remove(w)) rehome(w,workspace()->outputAt(input()->pointer()->pos()));
+            schedule();
+        });
+        connect(w,&Window::outputChanged,this,[this,w]{
+            // Vaela's own moves land where placed says. Any other move onto another monitor
+            // (KWin's window-to-screen shortcuts, a changed monitor setup) gives the window a new home.
+            if(arranging || moving.contains(w) || resizing.contains(w)) return;
+            const auto at=w->moveResizeGeometry().topLeft();
+            if(placed.contains(w) && std::abs(at.x()-placed[w].x())<1 && std::abs(at.y()-placed[w].y())<1) return;
+            rehome(w,w->output());schedule();
+        });
+        // KWin's quick tiling (dragging to an edge, say) would take a window out of the grid; schedule()
+        // lets arrange() put it back on monitors Vaela tiles.
+        connect(w,&Window::quickTileModeChanged,this,[this]{schedule();});
         schedule();
     }
     void arrange() {
         if (locked()) return;
         if (mode()=="Float") {
             for(auto it=floating.begin();it!=floating.end();) {
-                if(it.key()->isOnCurrentActivity() && it.key()->isOnCurrentDesktop()) {it.key()->moveResize(it.value());it=floating.erase(it);} else ++it;
+                if(it.key()->isOnCurrentActivity() && it.key()->isOnCurrentDesktop()) {placed.remove(it.key());it.key()->moveResize(it.value());it=floating.erase(it);} else ++it;
             }
             return;
         }
         arranging=true;
         const auto all=windowOrder;
         QHash<LogicalOutput *, QList<Window *>> groups;
-        for(auto w:all) if(eligible(w)) groups[w->output()].append(w);
+        for(auto w:all) if(eligible(w)) groups[home(w)].append(w);
+        // Below every monitor: strip windows that would show on a neighbouring monitor wait there.
+        double parking=0;
+        for(auto o:workspace()->outputs()) parking=std::max(parking,o->geometryF().bottom()+200);
         for(auto it=groups.begin();it!=groups.end();++it) {
             const auto list=it.value();
+            const auto output=it.key();
             // Monitors Vaela does not run on float; tiled windows moved there get their old size back.
             if(!covers(it.key())) {
                 for(auto w:list) if(floating.contains(w) && !resizing.contains(w) && !w->isInteractiveMove()) {
                     auto r=floating.take(w);
+                    placed.remove(w);
                     // A window dragged over from a tiled monitor stays where it was dropped.
                     if(!it.key()->geometryF().contains(r.center())) r.moveCenter(w->frameGeometry().center());
                     w->moveResize(r);
@@ -273,9 +316,12 @@ class Vaela : public Plugin, public InputEventFilter {
             const bool scroll=mode()=="Scrollable";
             const int cols=scroll ? list.size() : int(std::ceil(std::sqrt(list.size())));
             const int rows=scroll ? 1 : (list.size()+cols-1)/cols;
-            auto key=layoutKey(list.first());
+            auto key=layoutKey(output);
             auto widths=Layout::sizes(columns.value(key),cols,area.width()-gap*(cols+1));
             auto heights=Layout::sizes(this->rows.value(key),rows,area.height()-gap*(rows+1));
+            // An incomplete last row spreads its windows over the whole width rather than leaving a hole.
+            const int last=list.size()-(rows-1)*cols;
+            const auto lastWidths=!scroll && last<cols ? Layout::sizes(lastRows.value(key),last,area.width()-gap*(last+1)) : QVector<double>();
             // A remembered width seeds each column once, so resizing one window never resizes
             // other open windows of the same application.
             if(scroll) for(int i=0;i<list.size();++i) {
@@ -287,15 +333,29 @@ class Vaela : public Plugin, public InputEventFilter {
             for(int i=0;i<cols;++i) {xs[i]=total;total+=widths[i]+gap;}
             double y=gap;
             for(int i=0;i<rows;++i) {ys[i]=y;y+=heights[i]+gap;}
-            int focus=std::max(0,int(list.indexOf(lastWindow)));
+            // Each monitor centres its own focused column; if that window closed, its neighbour.
+            int focus=list.indexOf(focused.value(output).data());
+            if(focus<0) focus=std::clamp(focusIndex.value(output,0),0,int(list.size())-1);
+            focusIndex[output]=focus;
             // The focused column always sits in the middle of the screen, so new windows open centred.
             double offset=scroll ? xs[focus]-(area.width()-widths[focus])/2 : 0;
             if(scroll) for(int i=0;i<list.size();++i) if(resizing.contains(list[i])) offset=area.x()+xs[i]-list[i]->moveResizeGeometry().x();
             for(int i=0;i<list.size();++i) {
                 auto w=list[i]; if(!floating.contains(w)) floating[w]=w->frameGeometry();
-                if(resizing.contains(w)) continue;
+                if(resizing.contains(w) || w->isInteractiveMove()) continue;
                 if(w->maximizeMode()!=MaximizeRestore) w->setMaximize(false,false);
-                w->moveResize(RectF(area.x()+xs[i%cols]-offset,area.y()+ys[i/cols],widths[i%cols],heights[i/cols]));
+                if(w->quickTileMode()!=QuickTileMode(QuickTileFlag::None)) w->setQuickTileModeAtCurrentPosition(QuickTileFlag::None);
+                double x=xs[i%cols], width=widths[i%cols];
+                if(!lastWidths.isEmpty() && i/cols==rows-1) {
+                    x=gap;
+                    for(int c=0;c<i%cols;++c) x+=lastWidths[c]+gap;
+                    width=lastWidths[i%cols];
+                }
+                RectF r(area.x()+x-offset,area.y()+ys[i/cols],width,heights[i/cols]);
+                if(scroll) for(auto other:workspace()->outputs())
+                    if(other!=output && QRectF(other->geometryF()).intersects(QRectF(r).adjusted(1,1,-1,-1))) {r.moveTop(parking);break;}
+                placed[w]=r.topLeft();
+                w->moveResize(r);
             }
         }
         arranging=false;
@@ -324,8 +384,10 @@ public:
         layoutTimer.setSingleShot(true); layoutTimer.setInterval(40);
         connect(&layoutTimer,&QTimer::timeout,this,&Vaela::arrange);
         connect(workspace(),&Workspace::windowAdded,this,&Vaela::watch);
-        connect(workspace(),&Workspace::windowRemoved,this,[this](Window*w){windowOrder.removeAll(w);floating.remove(w);scrollWidths.remove(w);resizing.remove(w);schedule();});
-        connect(workspace(),&Workspace::windowActivated,this,[this](Window *w){if(appWindow(w)) lastWindow=w;schedule();});
+        connect(workspace(),&Workspace::windowRemoved,this,[this](Window*w){
+            windowOrder.removeAll(w);floating.remove(w);scrollWidths.remove(w);resizing.remove(w);moving.remove(w);homes.remove(w);placed.remove(w);schedule();
+        });
+        connect(workspace(),&Workspace::windowActivated,this,[this](Window *w){if(appWindow(w)) {lastWindow=w;focused[home(w)]=w;}schedule();});
         lastWindow=workspace()->activeWindow();
         connect(workspace(),&Workspace::currentDesktopChanged,this,[this]{schedule();});
         connect(workspace(),&Workspace::currentActivityChanged,this,[this]{schedule();});
@@ -356,7 +418,9 @@ public:
             else setShortcut(id,e->key==Qt::Key_Backspace && !modifiers ? QString() : QKeySequence(QKeyCombination(modifiers,e->key)).toString(QKeySequence::PortableText),false);
             return true;
         }
-        if(!covers(workspace()->activeOutput())) return capturedKeys.contains(e->nativeScanCode);
+        // Layout keys act on the focused window's monitor, wherever the pointer is.
+        auto active=workspace()->activeWindow();
+        if(!covers(appWindow(active) ? home(active) : workspace()->activeOutput())) return capturedKeys.contains(e->nativeScanCode);
         const auto command=columnShortcut(e->key,modifiers,mode()=="Auto Tiling",mode()=="Scrollable",customLayoutKeys());
         if(command.isEmpty()) return capturedKeys.contains(e->nativeScanCode);
         // Run before KGlobalAccel: Plasma's zoom and workspace defaults share these keys.
@@ -518,7 +582,9 @@ public Q_SLOTS:
             if(name.startsWith("send")) {if(appWindow(w)) w->setDesktops({dest});} else m->setCurrent(dest);
         } else if(name=="cycle-layout") {QStringList modes{"Float","Auto Tiling","Scrollable"};setMode(modes[(modes.indexOf(mode())+1)%3]);}
         else if(name=="focus-next" || name=="focus-previous") {
-            QList<Window*> list; for(auto win:windowOrder) if(eligible(win) && win->output()==workspace()->activeOutput()) list.append(win);
+            // Within the strip of the monitor the focused window is on.
+            const auto output=appWindow(w) ? home(w) : workspace()->activeOutput();
+            QList<Window*> list; for(auto win:windowOrder) if(eligible(win) && home(win)==output) list.append(win);
             if(!list.isEmpty()) {
                 int next=std::max(0,int(list.indexOf(w)))+(name=="focus-next"?1:-1);
                 // The Scrollable strip stops at its ends; the other layouts wrap around.
@@ -527,7 +593,7 @@ public Q_SLOTS:
             }
         } else if(name=="column-left" || name=="column-right") {
             if(mode()!="Scrollable" || !w || !eligible(w)) return;
-            QList<Window*> list; for(auto win:windowOrder) if(eligible(win) && win->output()==w->output()) list.append(win);
+            QList<Window*> list; for(auto win:windowOrder) if(eligible(win) && home(win)==home(w)) list.append(win);
             int index=list.indexOf(w), neighbour=index+(name=="column-left"?-1:1);
             if(index>=0 && neighbour>=0 && neighbour<list.size()) {
                 windowOrder.swapItemsAt(windowOrder.indexOf(w),windowOrder.indexOf(list[neighbour]));schedule();
@@ -538,7 +604,7 @@ public Q_SLOTS:
                 QSizeF size=w->frameGeometry().size();
                 if(name=="widen" || name=="narrow") size.setWidth(std::max(120.,size.width()+(name=="widen"?80:-80)));
                 else size.setHeight(std::max(100.,size.height()+(name=="taller"?60:-60)));
-                if(mode()=="Float" || !covers(w->output())) {auto r=w->frameGeometry();r.setSize(size);w->moveResize(r);}
+                if(mode()=="Float" || !covers(home(w))) {auto r=w->frameGeometry();r.setSize(size);w->moveResize(r);}
                 else {rememberResize(w,size);saveWidth(w);schedule();}
             }
             if(name=="close") w->closeWindow();

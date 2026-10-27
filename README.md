@@ -56,19 +56,19 @@ Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 4
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 
 ```bash
-rpm-ostree install ./vaela-desktop-1.1.1-1.fc45.x86_64.rpm
+rpm-ostree install ./vaela-desktop-1.1.2-1.fc45.x86_64.rpm
 ```
 
 Replacing an earlier local build (including the old `vela-desktop` package):
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.1.1-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.1.2-1.fc45.x86_64.rpm
 ```
 
 **Fedora Workstation**
 
 ```bash
-sudo dnf install ./vaela-desktop-1.1.1-1.fc45.x86_64.rpm
+sudo dnf install ./vaela-desktop-1.1.2-1.fc45.x86_64.rpm
 ```
 
 Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so
@@ -96,6 +96,13 @@ The magnifier opens Quick Commands and the gear opens Vaela Settings.
 - **Float:** windows go back to where they were before Vaela arranged them.
 
 Dialogs, pinned, minimized and fullscreen windows are never arranged.
+
+With more than one monitor, each one tiles its own windows: in Auto Tiling every
+monitor has its own grid, and in Scrollable its own strip that scrolls on its own.
+A window stays on its monitor until you drag it to another or use KWin's
+*Window to Next Screen*. Columns that would slide onto a neighbouring monitor wait
+off-screen until you scroll to them, and in Auto Tiling an uneven last row shares
+the full width, so the gap you set is the only space between windows.
 
 ### Workspaces
 
@@ -141,7 +148,7 @@ and **Shift+right-click** skips Vaela entirely.
 | Meta+Ctrl+S | Vaela Settings |
 | Meta+Ctrl+M | Radial menu |
 | Meta+Ctrl+Space | Cycle the layout |
-| Meta+← / → | Focus the window to the left / right (Scrollable) |
+| Meta+← / → | Focus the window to the left / right (Auto Tiling and Scrollable) |
 | Meta+Alt+← / → | Focus the previous / next window |
 | Ctrl+Meta+← / → | Move the column left / right (Scrollable) |
 | Meta+Plus / Minus | Widen / narrow the active column |

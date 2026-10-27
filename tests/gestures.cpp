@@ -18,7 +18,7 @@ private Q_SLOTS:
         QVERIFY(columnShortcut(Qt::Key_Left,Qt::MetaModifier|Qt::ControlModifier,true,false).isEmpty());
         QCOMPARE(columnShortcut(Qt::Key_Left,Qt::MetaModifier,false,true),QString("focus-previous"));
         QCOMPARE(columnShortcut(Qt::Key_Right,Qt::MetaModifier,false,true),QString("focus-next"));
-        QVERIFY(columnShortcut(Qt::Key_Left,Qt::MetaModifier,true,false).isEmpty());
+        QCOMPARE(columnShortcut(Qt::Key_Left,Qt::MetaModifier,true,false),QString("focus-previous"));
         QVERIFY(columnShortcut(Qt::Key_Right,Qt::MetaModifier,false,false).isEmpty());
         QCOMPARE(QKeySequence("Meta++")[0].key(),Qt::Key_Plus);
         QCOMPARE(QKeySequence("Meta+-")[0].key(),Qt::Key_Minus);
@@ -31,7 +31,7 @@ private Q_SLOTS:
         QVERIFY(columnShortcut(Qt::Key_Plus,Qt::MetaModifier,true,false,custom).isEmpty());
         QCOMPARE(columnShortcut(Qt::Key_Minus,Qt::MetaModifier,true,false,custom),QString("narrow"));
         QCOMPARE(columnShortcut(Qt::Key_Left,Qt::AltModifier|Qt::ShiftModifier,false,true,custom),QString("column-left"));
-        QVERIFY(columnShortcut(Qt::Key_L,Qt::MetaModifier,true,false,custom).isEmpty());
+        QCOMPARE(columnShortcut(Qt::Key_L,Qt::MetaModifier,true,false,custom),QString("focus-next"));
         // Recorded keys round-trip through the text Vaela stores.
         QCOMPARE(QKeySequence(QKeySequence(QKeyCombination(Qt::MetaModifier|Qt::ControlModifier,Qt::Key_M)).toString(QKeySequence::PortableText)),QKeySequence("Meta+Ctrl+M"));
     }

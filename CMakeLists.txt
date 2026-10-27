@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(vaela VERSION 1.1.1 LANGUAGES CXX)
+project(vaela VERSION 1.1.2 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 set(CMAKE_CXX_STANDARD 20)

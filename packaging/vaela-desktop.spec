@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.1.1
+Version:        1.1.2
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -85,6 +85,20 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Tue Oct 27 2026 Vaela contributors - 1.1.2-1
+- Tile each monitor on its own when Vaela runs on several. A window keeps its monitor
+  until you drag it or send it to another, instead of joining whichever monitor a
+  scrolled-away column happened to cross.
+- Scrollable: each monitor centres its own focused column, so Meta+Left/Right on one
+  monitor no longer moves the other's windows; columns that would slide onto a
+  neighbouring monitor wait off-screen until you scroll to them.
+- Auto Tiling: an uneven last row now shares the full width of the screen, so
+  widening a window fills it and the gap setting is the only space between windows.
+- Meta+Left/Right focus the window to the left or right in Auto Tiling too, instead of
+  Plasma's quick tiling pulling a window out of the grid; a window quick-tiled another
+  way (dragged to an edge) goes back into the grid.
+- Layout keys act on the monitor of the focused window, wherever the pointer is.
+
 * Tue Oct 27 2026 Vaela contributors - 1.1.1-1
 - Open the radial menu at the pointer on whichever monitor it is on, as long as
   Vaela runs there, from the right button or Meta+Ctrl+M. Vaela's views are now

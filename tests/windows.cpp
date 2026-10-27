@@ -22,16 +22,21 @@ int main(int argc,char **argv) {
     auto check=[&](bool ok,const char *message){if(!ok){qCritical()<<message<<a.size()<<b.size()<<c.size();passed=false;}};
     QTimer::singleShot(800,[&]{controller.call("setMode","Auto Tiling");});
     QTimer::singleShot(1600,[&]{
-        for(auto w:{&a,&b,&c}) check(w->width()>500 && w->width()<700 && w->height()<500,"Tiling did not resize the window into a grid");
+        // Three windows: two side by side, and the third alone in the last row, across the whole width.
+        for(auto w:{&a,&b}) check(w->width()>500 && w->width()<700 && w->height()<500,"Tiling did not resize the window into a grid");
+        check(c.width()>1200 && c.height()<500,"The last row did not span the whole width");
+        probe.call("hover",a.title());
         controller.call("action","widen");
     });
     QTimer::singleShot(2000,[&]{controller.call("action","taller");});
     QTimer::singleShot(2400,[&]{
-        check(c.width()>700 && a.width()==c.width() && b.width()<600,"Resizing a tiled column did not adjust its neighbours");
+        check(a.width()>700 && b.width()<600 && c.width()>1200,"Resizing a tiled column did not adjust its neighbours");
         auto ra=geometry(a),rb=geometry(b),rc=geometry(c);
         check(!ra.intersects(rb) && !ra.intersects(rc) && !rb.intersects(rc),"Tiled windows overlap after resizing");
-        check(qAbs(rb.x()-ra.right()-8)<2 && qAbs(rc.y()-ra.bottom()-8)<2,"Tiled neighbours did not preserve their gaps");
-        check(c.height()>a.height() && a.height()==b.height(),"Resizing a tiled row did not adjust all row neighbours");
+        check(qAbs(rb.x()-ra.right()-8)<2 && qAbs(rc.y()-ra.bottom()-8)<2 && qAbs(rc.x()-ra.x())<2,"Tiled neighbours did not preserve their gaps");
+        check(a.height()>c.height() && a.height()==b.height(),"Resizing a tiled row did not adjust all row neighbours");
+        // The Scrollable steps below act on the newest window again.
+        probe.call("hover",c.title());
         controller.call("setMode","Scrollable");
     });
     QTimer::singleShot(3200,[&]{
@@ -73,9 +78,9 @@ int main(int argc,char **argv) {
     });
     QTimer::singleShot(7200,[&]{
         beforeA=a.width();beforeB=b.width();
-        check(probe.call("beginResize",c.title()).arguments().first().toBool(),"Could not begin native tile resize");
+        check(probe.call("beginResize",a.title()).arguments().first().toBool(),"Could not begin native tile resize");
     });
-    QTimer::singleShot(7400,[&]{check(probe.call("stepResize",c.title(),80.,0.).arguments().first().toBool(),"Native tile resize did not start");});
+    QTimer::singleShot(7400,[&]{check(probe.call("stepResize",a.title(),80.,0.).arguments().first().toBool(),"Native tile resize did not start");});
     QTimer::singleShot(8000,[&]{
         check(a.width()>beforeA && b.width()<beforeB,"Tiled neighbours did not resize during the active drag");
         probe.call("endResize");

@@ -7,6 +7,7 @@
 #include <Qt>
 
 // Keys Vaela takes before Plasma's global shortcuts, only while a layout that uses them is active.
+// Meta+Left/Right focus rather than quick-tile in both tiling layouts: Vaela owns the geometry there.
 struct LayoutKey {
     QString id, label, keys; // keys: the default, as QKeySequence portable text
     bool tiled, scrollable;  // the layouts it works in
@@ -15,8 +16,8 @@ inline const QList<LayoutKey> &layoutKeys() {
     static const QList<LayoutKey> keys{
         {"widen", "Widen the active column", "Meta++", true, true},
         {"narrow", "Narrow the active column", "Meta+-", true, true},
-        {"focus-previous", "Focus the window to the left", "Meta+Left", false, true},
-        {"focus-next", "Focus the window to the right", "Meta+Right", false, true},
+        {"focus-previous", "Focus the window to the left", "Meta+Left", true, true},
+        {"focus-next", "Focus the window to the right", "Meta+Right", true, true},
         {"column-left", "Move the column left", "Meta+Ctrl+Left", false, true},
         {"column-right", "Move the column right", "Meta+Ctrl+Right", false, true}};
     return keys;
