@@ -7,6 +7,7 @@
             }
         ],
         "Description": "Defaults and first-login layout for the Vaela desktop",
+        "Icon": "vaela",
         "Id": "org.vaela.desktop",
         "License": "GPL-2.0-or-later",
         "Name": "Vaela",

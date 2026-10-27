@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.1.4
+Version:        1.2.0
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -82,10 +82,18 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %{_datadir}/vaela/
 %{_datadir}/plasma/look-and-feel/org.vaela.desktop/
 %{_datadir}/plasma/wallpapers/org.vaela.background/
+%{_datadir}/icons/hicolor/*/apps/vaela.svg
 %{_libdir}/qt6/qml/org/vaela/
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Tue Oct 27 2026 Vaela contributors - 1.2.0-1
+- A logo: the stars of Vela, the Sail constellation, forming a V, the lowest in coral.
+  It is installed as the "vaela" icon, with simpler drawings for 16 to 32 px, and shows
+  for Vaela's group in KDE's Shortcuts settings, on the login session, the look-and-feel
+  theme, the wallpaper plugin and Vaela's KWin plugin and effect, in the centre of the
+  radial menu and in the Vaela Settings header.
+
 * Tue Oct 27 2026 Vaela contributors - 1.1.4-1
 - Background videos no longer go black, or show the previous workspace's video, after
   switching workspaces quickly: a switch during a crossfade now ends that fade before

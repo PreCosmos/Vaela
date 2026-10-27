@@ -2,6 +2,7 @@
 Type=Application
 Name=Vaela
 Comment=A Vivaldi-style desktop built on KWin
+Icon=vaela
 Exec=@PLASMA_DBUS_HELPER@ @CMAKE_INSTALL_FULL_BINDIR@/startvaela
 TryExec=@CMAKE_INSTALL_FULL_BINDIR@/startvaela
 # Plasma, its portals and Qt's platform theme all key off "KDE".

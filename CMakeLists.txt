@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(vaela VERSION 1.1.4 LANGUAGES CXX)
+project(vaela VERSION 1.2.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 set(CMAKE_CXX_STANDARD 20)
@@ -43,7 +43,14 @@ add_executable(vaela-shell src/shell.cpp)
 target_link_libraries(vaela-shell PRIVATE Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::DBus vaela-radial LayerShellQt::Interface KF6::ConfigCore)
 target_compile_definitions(vaela-shell PRIVATE VAELA_QML_PATH="${VAELA_DATADIR}/Main.qml")
 install(TARGETS vaela-shell DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES src/Main.qml src/RadialEditor.qml src/Theme.qml src/VButton.qml src/Shadow.qml src/qmldir session/migrate-layout.js DESTINATION ${VAELA_DATADIR})
+install(FILES src/Main.qml src/RadialEditor.qml src/Theme.qml src/VButton.qml src/Shadow.qml src/qmldir src/vaela-mark.svg session/migrate-layout.js DESTINATION ${VAELA_DATADIR})
+# The Vaela logo as the "vaela" icon, with simpler drawings for small sizes. KDE's Shortcuts
+# settings show it for Vaela's group, which has no application entry of its own.
+set(VAELA_ICONDIR "${CMAKE_INSTALL_DATADIR}/icons/hicolor")
+install(FILES data/icons/vaela.svg DESTINATION "${VAELA_ICONDIR}/scalable/apps")
+install(FILES data/icons/vaela-32.svg DESTINATION "${VAELA_ICONDIR}/32x32/apps" RENAME vaela.svg)
+install(FILES data/icons/vaela-16.svg DESTINATION "${VAELA_ICONDIR}/22x22/apps" RENAME vaela.svg)
+install(FILES data/icons/vaela-16.svg DESTINATION "${VAELA_ICONDIR}/16x16/apps" RENAME vaela.svg)
 # Per-workspace backgrounds: a Plasma wallpaper, and the QML module it hears from Vaela through.
 qt_policy(SET QTP0001 NEW)
 qt_add_qml_module(vaelabackground

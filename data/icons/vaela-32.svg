@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- The Vaela icon for 32 px: fewer, larger stars. -->
+  <rect x="0.5" y="0.5" width="99" height="99" rx="23" fill="#1c1d23" stroke="#2c2d36"/>
+  <polyline points="20,20 34,46 50,70 66,46 80,20" fill="none" stroke="#ecedf2" stroke-opacity="0.55" stroke-width="5" stroke-linejoin="round"/>
+  <g fill="#ecedf2">
+    <circle cx="20" cy="20" r="7"/>
+    <circle cx="80" cy="20" r="7"/>
+  </g>
+  <path d="M50 54 L55 65 L66 70 L55 75 L50 86 L45 75 L34 70 L45 65 Z" fill="#ef6a4f"/>
+</svg>

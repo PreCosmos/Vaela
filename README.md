@@ -1,3 +1,5 @@
+<p align="center"><img src="data/icons/vaela.svg" width="128" alt="The Vaela logo: the stars of the Sail constellation forming a V, the lowest one coral"></p>
+
 # Vaela
 
 A Wayland desktop that works like the Vivaldi browser: mouse gestures, a radial
@@ -56,19 +58,19 @@ Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 4
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 
 ```bash
-rpm-ostree install ./vaela-desktop-1.1.4-1.fc45.x86_64.rpm
+rpm-ostree install ./vaela-desktop-1.2.0-1.fc45.x86_64.rpm
 ```
 
 Replacing an earlier local build (including the old `vela-desktop` package):
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.1.4-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.2.0-1.fc45.x86_64.rpm
 ```
 
 **Fedora Workstation**
 
 ```bash
-sudo dnf install ./vaela-desktop-1.1.4-1.fc45.x86_64.rpm
+sudo dnf install ./vaela-desktop-1.2.0-1.fc45.x86_64.rpm
 ```
 
 Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so

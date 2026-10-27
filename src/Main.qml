@@ -405,8 +405,15 @@ QtObject {
                     RowLayout {
                         Layout.fillWidth: true; spacing: 12
                         Rectangle {
-                            width: 38; height: 38; radius: 11; color: Theme.accentSoft
+                            width: 38; height: 38; radius: 11; color: overlay.view === "settings" ? Theme.surfacePressed : Theme.accentSoft
+                            // Vaela Settings wears the Vaela mark; the other views their own icon.
                             Image {
+                                visible: overlay.view === "settings"
+                                anchors.centerIn: parent; width: 28; height: 28; sourceSize: Qt.size(56,56)
+                                source: Qt.resolvedUrl("vaela-mark.svg")
+                            }
+                            Image {
+                                visible: overlay.view !== "settings"
                                 anchors.centerIn: parent; width: 20; height: 20; sourceSize: Qt.size(20,20)
                                 source: Theme.icon(overlay.view === "commands" ? "search" : overlay.view === "radial-settings" ? "view-list-icons" : "configure", Theme.accent)
                             }
@@ -845,9 +852,18 @@ QtObject {
                     Behavior on border.color {ColorAnimation {duration: Theme.fast}}
                     Column {
                         anchors.centerIn: parent; spacing: 3; width: 112
+                        // The Vaela mark while nothing is hovered; the hovered item's name otherwise.
+                        Image {
+                            visible: overlay.hot < 0 && radial.entries.length > 0
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 40; height: 40; sourceSize: Qt.size(80,80)
+                            source: Qt.resolvedUrl("vaela-mark.svg")
+                            Accessible.name: "Vaela"
+                        }
                         Text {
+                            visible: overlay.hot >= 0 || radial.entries.length === 0
                             width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight
-                            text: overlay.hot >= 0 && root.radialItems[overlay.hot] ? root.radialItems[overlay.hot].label : radial.entries.length ? "Vaela" : "Empty menu"
+                            text: overlay.hot >= 0 && root.radialItems[overlay.hot] ? root.radialItems[overlay.hot].label : "Empty menu"
                             color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold
                         }
                         Text {
