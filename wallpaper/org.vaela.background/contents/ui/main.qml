@@ -45,12 +45,15 @@ WallpaperItem {
     Component.onCompleted: show()
 
     function show() {
+        // A switch during a crossfade ends it first, so the layer it was fading out is free:
+        // loading into that layer while the fade still owned it left an empty layer in front.
+        if (fade.running) finishFade()
         const back = front === first ? second : first
         if (front && front.source.toString() === wanted) {
             // The same background, maybe on another workspace with options of its own; or switched
             // back before the other one was ready, which then stops loading.
             front.owner = vaela.workspace
-            if (!fade.running && back.source.toString() !== "") back.unload()
+            if (back.source.toString() !== "") back.unload()
             return
         }
         if (back.source.toString() === wanted) {
@@ -61,7 +64,7 @@ WallpaperItem {
     }
     function reveal(layer) {
         if (layer === front || layer.source.toString() !== wanted) return
-        if (fade.running) fade.complete()
+        if (fade.running) finishFade()
         const old = front
         front = layer
         layer.z = 1
@@ -70,6 +73,16 @@ WallpaperItem {
         fadeIn.target = layer
         fadeOut.target = old
         fade.start()
+    }
+    // Ends a crossfade at once: the new background fully shown, the old one unloaded.
+    function finishFade() {
+        const old = fade.old
+        fade.stop()
+        fade.old = null
+        if (front) front.opacity = 1
+        if (!old || old === front) return
+        if (old.kind === "video") positions[old.source.toString()] = old.position()
+        old.unload()
     }
     function failed(layer) {
         const source = layer.source.toString()
@@ -85,12 +98,7 @@ WallpaperItem {
         NumberAnimation {id: fadeIn; property: "opacity"; from: 0; to: 1; duration: vaela.transition; easing.type: Easing.InOutQuad}
         // The old video's sound fades with it rather than stopping at the end.
         NumberAnimation {id: fadeOut; property: "audible"; from: 1; to: 0; duration: vaela.transition}
-        onFinished: {
-            if (!old) return
-            if (old.kind === "video") root.positions[old.source.toString()] = old.position()
-            old.unload()
-            old = null
-        }
+        onFinished: root.finishFade()
     }
 
     Rectangle {anchors.fill: parent; color: "black"}

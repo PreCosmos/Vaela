@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.1.3
+Version:        1.1.4
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -86,6 +86,12 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Tue Oct 27 2026 Vaela contributors - 1.1.4-1
+- Background videos no longer go black, or show the previous workspace's video, after
+  switching workspaces quickly: a switch during a crossfade now ends that fade before
+  loading the next background.
+- KDE's Shortcuts settings list Vaela's shortcuts under "Vaela" instead of "KWin".
+
 * Tue Oct 27 2026 Vaela contributors - 1.1.3-1
 - Scrollable on several monitors: a column wider than its monitor, or peeking past its
   edge, now shows up to that edge and is cut off there, instead of disappearing. A new

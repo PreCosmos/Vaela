@@ -160,6 +160,8 @@ class Vaela : public Plugin, public InputEventFilter {
     // oldDefault: a shortcut this action used to ship with; a saved copy of it moves to the new key.
     void shortcut(QString id, QString key, std::function<void()> fn, QString oldDefault = {}) {
         auto a=new QAction(id,this); a->setObjectName(id); a->setProperty("componentName", "vaela");
+        // KDE's Shortcuts page would otherwise list these under the host application's name, KWin.
+        a->setProperty("componentDisplayName", QStringLiteral("Vaela"));
         KGlobalAccel::self()->setDefaultShortcut(a,{QKeySequence(key)});
         KGlobalAccel::self()->setShortcut(a,{QKeySequence(key)});
         if(!oldDefault.isEmpty() && KGlobalAccel::self()->shortcut(a)==QList<QKeySequence>{QKeySequence(oldDefault)})
