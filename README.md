@@ -56,19 +56,19 @@ Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 4
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 
 ```bash
-rpm-ostree install ./vaela-desktop-1.1.2-1.fc45.x86_64.rpm
+rpm-ostree install ./vaela-desktop-1.1.3-1.fc45.x86_64.rpm
 ```
 
 Replacing an earlier local build (including the old `vela-desktop` package):
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.1.2-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.1.3-1.fc45.x86_64.rpm
 ```
 
 **Fedora Workstation**
 
 ```bash
-sudo dnf install ./vaela-desktop-1.1.2-1.fc45.x86_64.rpm
+sudo dnf install ./vaela-desktop-1.1.3-1.fc45.x86_64.rpm
 ```
 
 Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so
@@ -100,9 +100,10 @@ Dialogs, pinned, minimized and fullscreen windows are never arranged.
 With more than one monitor, each one tiles its own windows: in Auto Tiling every
 monitor has its own grid, and in Scrollable its own strip that scrolls on its own.
 A window stays on its monitor until you drag it to another or use KWin's
-*Window to Next Screen*. Columns that would slide onto a neighbouring monitor wait
-off-screen until you scroll to them, and in Auto Tiling an uneven last row shares
-the full width, so the gap you set is the only space between windows.
+*Window to Next Screen*. A Scrollable column that is wider than its monitor, or
+peeks past its edge, is cut off at that edge rather than showing on the next
+monitor, and clicks there go to that monitor's own windows. In Auto Tiling an uneven
+last row shares the full width, so the gap you set is the only space between windows.
 
 ### Workspaces
 
@@ -281,6 +282,7 @@ Run the tests, including a private software-rendered KWin session:
 | `session/startvaela` | Starts Plasma's Wayland session with Vaela's defaults (`/usr/share/vaela/xdg`) layered under your own `~/.config`, and carries settings over from the pre-0.5 "Vela" names |
 | `src/plugin.cpp` | KWin plugin: gestures, the right-click hold, layouts, shortcuts, and the `org.vaela.Controller` D-Bus service. It is active only when `VAELA_SESSION=1`, which `startvaela` sets |
 | `src/shell.cpp`, `src/*.qml` | `vaela-shell`: the layout switch, workspace bar, radial menu, Quick Commands and Settings, as layer-shell surfaces. It autostarts from `/etc/xdg/autostart` and exits unless the plugin's D-Bus service appears, so other sessions are unaffected |
+| `src/clip.cpp` | The `vaelaclip` KWin effect: draws each tiled window only on its own monitor |
 | `wallpaper/org.vaela.background`, `src/background.cpp` | The *Vaela Workspace Backgrounds* Plasma wallpaper and its `org.vaela.background` QML module, which follows the plugin's `backgroundsChanged` signal and UPower's battery state |
 | `lookandfeel/org.vaela.desktop` | Plasma look-and-feel package with Vaela's colours and first-login panel layout |
 | `packaging/vaela-desktop.spec` | The RPM |
@@ -290,6 +292,9 @@ Run the tests, including a private software-rendered KWin session:
 - Each build is tied to one KWin version and has to be rebuilt after KWin updates.
 - The workspace bar shows window titles; live thumbnails and workspace stacks are
   not done yet.
+- A screenshot of the whole desktop at once (Spectacle's *Entire Desktop*) shows
+  Scrollable columns reaching over a neighbouring monitor; screenshots of one
+  monitor show it as it looks.
 
 ## License
 

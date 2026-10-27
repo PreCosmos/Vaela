@@ -53,6 +53,9 @@ class Vaela : public Plugin, public InputEventFilter {
     QHash<LogicalOutput *, QPointer<Window>> focused; // the window each monitor's strip centres on
     QHash<LogicalOutput *, int> focusIndex;            // and its place, for when it closes
     QHash<Window *, QPointF> placed;                   // where arrange() last put each window
+    QPointer<LogicalOutput> pointerOutput;              // the monitor the pointer was last on
+    QSet<int> swallowed;                                // buttons whose press hit an unseen overhang
+    bool pressUnseen = false;                           // the right button went down on one
     QList<Window *> windowOrder;
     QHash<quint32,QString> capturedKeys;
     QList<QAction *> globals;
@@ -284,6 +287,8 @@ class Vaela : public Plugin, public InputEventFilter {
     }
     void arrange() {
         if (locked()) return;
+        // The vaelaHome property tells the vaelaclip effect which monitor a tiled window may be drawn on.
+        for(auto w:windowOrder) w->setProperty("vaelaHome",QVariant());
         if (mode()=="Float") {
             for(auto it=floating.begin();it!=floating.end();) {
                 if(it.key()->isOnCurrentActivity() && it.key()->isOnCurrentDesktop()) {placed.remove(it.key());it.key()->moveResize(it.value());it=floating.erase(it);} else ++it;
@@ -294,9 +299,6 @@ class Vaela : public Plugin, public InputEventFilter {
         const auto all=windowOrder;
         QHash<LogicalOutput *, QList<Window *>> groups;
         for(auto w:all) if(eligible(w)) groups[home(w)].append(w);
-        // Below every monitor: strip windows that would show on a neighbouring monitor wait there.
-        double parking=0;
-        for(auto o:workspace()->outputs()) parking=std::max(parking,o->geometryF().bottom()+200);
         for(auto it=groups.begin();it!=groups.end();++it) {
             const auto list=it.value();
             const auto output=it.key();
@@ -352,13 +354,31 @@ class Vaela : public Plugin, public InputEventFilter {
                     width=lastWidths[i%cols];
                 }
                 RectF r(area.x()+x-offset,area.y()+ys[i/cols],width,heights[i/cols]);
-                if(scroll) for(auto other:workspace()->outputs())
-                    if(other!=output && QRectF(other->geometryF()).intersects(QRectF(r).adjusted(1,1,-1,-1))) {r.moveTop(parking);break;}
                 placed[w]=r.topLeft();
+                w->setProperty("vaelaHome",output->name());
                 w->moveResize(r);
             }
         }
         arranging=false;
+        lowerOverhangs(workspace()->outputAt(input()->pointer()->pos()));
+    }
+    // Whether w is a tiled window reaching over from another monitor at pos, where it is not drawn.
+    bool overhang(Window *w, const QPointF &pos) const {
+        if(!w) return false;
+        const auto home=w->property("vaelaHome").toString();
+        const auto under=workspace()->outputAt(pos);
+        return !home.isEmpty() && under && home!=under->name();
+    }
+    // A tiled window reaching over from another monitor is not drawn there, but would still take
+    // the clicks; it goes below the windows of the monitor the pointer is on.
+    void lowerOverhangs(LogicalOutput *output) {
+        if(!output) return;
+        const QRectF monitor=output->geometryF();
+        const auto stack=workspace()->stackingOrder(); // lowering reorders the live list
+        for(auto w:stack) {
+            const auto home=w->property("vaelaHome").toString();
+            if(!home.isEmpty() && home!=output->name() && QRectF(w->frameGeometry()).intersects(monitor.adjusted(1,1,-1,-1))) workspace()->lowerWindow(w);
+        }
     }
 public:
     Vaela() : InputEventFilter(InputFilterOrder::TabBox) {
@@ -429,15 +449,24 @@ public:
     bool pointerButton(PointerButtonEvent *e) override {
         if(qEnvironmentVariable("VAELA_SESSION")!="1") return false;
         if(locked()) {stopHold();down=false;radial=false;return false;}
+        // Where nothing of this monitor lies under the pointer, a window reaching over from another
+        // monitor would get the click though it is not drawn here; the click goes nowhere instead.
+        if(e->state==PointerButtonState::Released && swallowed.remove(int(e->button))) return true;
+        const bool unseen=overhang(input()->pointer()->focus(),e->position);
+        if(e->state==PointerButtonState::Pressed && unseen && e->button!=Qt::RightButton) {swallowed.insert(int(e->button));return true;}
         if(e->button!=Qt::RightButton) return false;
         if(e->state==PointerButtonState::Pressed) {
             config->reparseConfiguration();
             if(!KConfigGroup(config,"General").readEntry("Gestures",true) || e->modifiers.testFlag(Qt::ShiftModifier)
-                || !covers(workspace()->outputAt(e->position))) return false;
-            gesture.begin(e->position);down=true;radial=false;target=nullptr;
+                || !covers(workspace()->outputAt(e->position))) {
+                if(unseen) swallowed.insert(int(e->button));
+                return unseen;
+            }
+            gesture.begin(e->position);down=true;radial=false;target=nullptr;pressUnseen=unseen;
             auto stack=workspace()->stackingOrder();
             for(auto it=stack.crbegin();it!=stack.crend();++it) {
                 auto w=*it;
+                if(overhang(w,e->position)) continue;
                 if(w->isOnCurrentDesktop() && w->isOnCurrentActivity() && !w->isMinimized() && w->frameGeometry().contains(e->position)) {
                     // Let shell UI, panels and desktop handle their own context menus.
                     if(!appWindow(w) && !w->isDesktop()) {down=false;return false;}
@@ -455,11 +484,15 @@ public:
             action(KConfigGroup(config,"Bindings").readEntry(gesture.directions,actions.value(gesture.directions)));
         } else {
             // Send a balanced click without changing the physical button state in KWin.
-            contextClick();
+            if(!pressUnseen) contextClick();
         }
         target=nullptr; return true;
     }
+    bool pointerAxis(PointerAxisEvent *e) override {
+        return !locked() && overhang(input()->pointer()->focus(),e->position);
+    }
     bool pointerMotion(PointerMotionEvent *e) override {
+        if(auto under=workspace()->outputAt(e->position); under!=pointerOutput) {pointerOutput=under;lowerOverhangs(under);}
         if(!down) return false;
         if(locked()) {down=false;stopHold();return false;}
         if(radial) {
@@ -604,7 +637,20 @@ public Q_SLOTS:
                 QSizeF size=w->frameGeometry().size();
                 if(name=="widen" || name=="narrow") size.setWidth(std::max(120.,size.width()+(name=="widen"?80:-80)));
                 else size.setHeight(std::max(100.,size.height()+(name=="taller"?60:-60)));
-                if(mode()=="Float" || !covers(home(w))) {auto r=w->frameGeometry();r.setSize(size);w->moveResize(r);}
+                if(mode()=="Float" || !covers(home(w))) {
+                    // An untiled window grows up to its monitor's width or height inside the gaps,
+                    // and moves back onto the monitor if growing pushed it past an edge.
+                    const QRectF area=workspace()->clientArea(MaximizeArea,home(w));
+                    const double gap=KConfigGroup(config,"General").readEntry("Gap",8);
+                    const QRectF inner=area.adjusted(gap,gap,-gap,-gap);
+                    QRectF r=w->frameGeometry();
+                    r.setSize(size.boundedTo(inner.size()));
+                    if(r.right()>inner.right()) r.moveRight(inner.right());
+                    if(r.bottom()>inner.bottom()) r.moveBottom(inner.bottom());
+                    if(r.left()<inner.left()) r.moveLeft(inner.left());
+                    if(r.top()<inner.top()) r.moveTop(inner.top());
+                    w->moveResize(RectF(r));
+                }
                 else {rememberResize(w,size);saveWidth(w);schedule();}
             }
             if(name=="close") w->closeWindow();

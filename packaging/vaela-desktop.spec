@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.1.2
+Version:        1.1.3
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -77,6 +77,7 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %{_bindir}/startvaela
 %{_bindir}/vaela-shell
 %{_libdir}/qt6/plugins/kwin/plugins/libvaela.so
+%{_libdir}/qt6/plugins/kwin/effects/plugins/libvaelaclip.so
 %{_datadir}/wayland-sessions/vaela.desktop
 %{_datadir}/vaela/
 %{_datadir}/plasma/look-and-feel/org.vaela.desktop/
@@ -85,6 +86,16 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Tue Oct 27 2026 Vaela contributors - 1.1.3-1
+- Scrollable on several monitors: a column wider than its monitor, or peeking past its
+  edge, now shows up to that edge and is cut off there, instead of disappearing. A new
+  KWin effect, vaelaclip, draws each tiled window only on its own monitor.
+- Clicks and scrolling on a monitor never reach the unseen part of a window from the
+  next monitor; that monitor's own windows get them.
+- Widening or growing a window that Vaela does not tile (Float mode, or a monitor Vaela
+  does not run on) stops at the monitor's size inside the gaps and keeps the window on
+  that monitor; tiled windows already stop at the edge of the screen.
+
 * Tue Oct 27 2026 Vaela contributors - 1.1.2-1
 - Tile each monitor on its own when Vaela runs on several. A window keeps its monitor
   until you drag it or send it to another, instead of joining whichever monitor a
