@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.2.0
+Version:        1.3.0
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -11,6 +11,7 @@ Obsoletes:      vela-desktop < 0.5.0
 Provides:       vela-desktop = %{version}-%{release}
 
 BuildRequires:  cmake
+BuildRequires:  python3
 BuildRequires:  gcc-c++
 BuildRequires:  extra-cmake-modules
 BuildRequires:  kwin-devel
@@ -29,6 +30,7 @@ BuildRequires:  vulkan-loader-devel
 Requires:       kwin = %{kwin_version}
 Requires:       plasma-workspace >= 6.7
 Requires:       plasma-desktop
+Requires:       python3
 Requires:       plasma-breeze
 Requires:       breeze-icon-theme
 Requires:       kscreenlocker
@@ -76,6 +78,8 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %doc README.md
 %{_bindir}/startvaela
 %{_bindir}/vaela-shell
+%{_libexecdir}/vaela-plasmashell
+%{_userunitdir}/plasma-plasmashell.service.d/50-vaela-config.conf
 %{_libdir}/qt6/plugins/kwin/plugins/libvaela.so
 %{_libdir}/qt6/plugins/kwin/effects/plugins/libvaelaclip.so
 %{_datadir}/wayland-sessions/vaela.desktop
@@ -87,6 +91,11 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Tue Oct 27 2026 Vaela contributors - 1.3.0-1
+- Isolate Vaela's Plasma shell layout and panel state from the regular Plasma session.
+- Restore the previous Plasma wallpaper when migrating an older shared layout.
+- Keep system account files and permissions unchanged.
+
 * Tue Oct 27 2026 Vaela contributors - 1.2.0-1
 - A logo: the stars of Vela, the Sail constellation, forming a V, the lowest in coral.
   It is installed as the "vaela" icon, with simpler drawings for 16 to 32 px, and shows

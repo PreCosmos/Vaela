@@ -1,0 +1,77 @@
+#!/usr/bin/python3
+"""Keep Vaela's Plasma layout out of the regular Plasma configuration."""
+import os
+from pathlib import Path
+import shutil
+import re
+import subprocess
+import sys
+
+
+def session_environment():
+    # Read the running compositor, not systemd's possibly stale imported variables.
+    try:
+        pid = int(subprocess.check_output(
+            ["systemctl", "--user", "show", "plasma-kwin_wayland.service",
+             "--property=MainPID", "--value"], timeout=5).strip())
+        if pid > 0:
+            return dict(item.split(b"=", 1) for item in
+                        Path(f"/proc/{pid}/environ").read_bytes().split(b"\0") if b"=" in item)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+    return os.environb
+
+
+def restore_plasma_wallpaper(text):
+    blocks = re.split(r"(?=^\[)", text, flags=re.M)
+    previous = {}
+    for block in blocks:
+        match = re.match(r"\[Containments\]\[(\d+)\]\[Wallpaper\]\[org.vaela.background\]\[General\]\n", block)
+        if match:
+            plugin = re.search(r"^Previous=(.*)$", block, re.M)
+            previous[match[1]] = plugin.group(1) if plugin and plugin.group(1) else "org.kde.image"
+    for index, block in enumerate(blocks):
+        match = re.match(r"\[Containments\]\[(\d+)\]\n", block)
+        if match:
+            plugin = previous.get(match[1], "org.kde.image")
+            if plugin == "org.vaela.background":
+                plugin = "org.kde.image"
+            blocks[index] = re.sub(r"^wallpaperplugin=org.vaela.background$",
+                                   lambda _: "wallpaperplugin=" + plugin, block, flags=re.M)
+    return "".join(blocks)
+
+
+def configure(vaela):
+    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    private = base / "vaela-plasma"
+    layout = base / "plasma-org.kde.plasma.desktop-appletsrc"
+    original = layout.read_text() if layout.is_file() else ""
+    restored = restore_plasma_wallpaper(original)
+    if vaela or restored != original:
+        private.mkdir(mode=0o700, parents=True, exist_ok=True)
+        # Copy only the shell's state. Other user settings remain readable as defaults.
+        for name in ("plasma-org.kde.plasma.desktop-appletsrc", "plasmashellrc"):
+            source, target = base / name, private / name
+            if source.is_file() and not target.exists():
+                with source.open("rb") as src, target.open("xb") as dst:
+                    os.chmod(target, 0o600)
+                    shutil.copyfileobj(src, dst)
+    # Upgrade older versions that selected Vaela's wallpaper in the shared layout.
+    # Save the Vaela layout above before handing the regular desktop back to Plasma.
+    if restored != original:
+        backup = layout.with_name(layout.name + ".pre-vaela-isolation")
+        if not backup.exists():
+            shutil.copy2(layout, backup)
+        layout.write_text(restored)
+    if vaela:
+        os.environ["XDG_CONFIG_HOME"] = str(private)
+        os.environ["XDG_CONFIG_DIRS"] = str(base) + ":" + os.environ.get("XDG_CONFIG_DIRS", "/etc/xdg")
+
+
+def main():
+    configure(session_environment().get(b"VAELA_SESSION") == b"1")
+    os.execv("@CMAKE_INSTALL_FULL_BINDIR@/plasmashell", ["plasmashell", *sys.argv[1:]])
+
+
+if __name__ == "__main__":
+    main()

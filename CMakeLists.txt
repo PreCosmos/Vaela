@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(vaela VERSION 1.2.0 LANGUAGES CXX)
+project(vaela VERSION 1.3.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 set(CMAKE_CXX_STANDARD 20)
@@ -11,6 +11,11 @@ set(PLASMA_DBUS_HELPER "${CMAKE_INSTALL_FULL_LIBEXECDIR}/plasma-dbus-run-session
 
 configure_file(session/startvaela.in startvaela @ONLY)
 configure_file(session/vaela.desktop.in vaela.desktop @ONLY)
+configure_file(session/vaela-plasmashell.in vaela-plasmashell @ONLY)
+configure_file(session/50-vaela-config.conf.in 50-vaela-config.conf @ONLY)
+install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/vaela-plasmashell" DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/50-vaela-config.conf"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/systemd/user/plasma-plasmashell.service.d")
 
 install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/startvaela" DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/vaela.desktop" DESTINATION "${CMAKE_INSTALL_DATADIR}/wayland-sessions")
@@ -70,6 +75,10 @@ install(DIRECTORY wallpaper/org.vaela.background DESTINATION "${CMAKE_INSTALL_DA
 # Plasma's autostart goes through systemd, which only scans the standard autostart folders.
 install(FILES session/vaela-shell.desktop DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/xdg/autostart)
 include(CTest)
+if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME session-config COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/session_config.py")
+endif()
 if(BUILD_TESTING)
     add_executable(gesture-test tests/gestures.cpp)
     target_include_directories(gesture-test PRIVATE src)

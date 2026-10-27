@@ -58,19 +58,19 @@ Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 4
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 
 ```bash
-rpm-ostree install ./vaela-desktop-1.2.0-1.fc45.x86_64.rpm
+rpm-ostree install ./vaela-desktop-1.3.0-1.fc45.x86_64.rpm
 ```
 
 Replacing an earlier local build (including the old `vela-desktop` package):
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.2.0-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.3.0-1.fc45.x86_64.rpm
 ```
 
 **Fedora Workstation**
 
 ```bash
-sudo dnf install ./vaela-desktop-1.2.0-1.fc45.x86_64.rpm
+sudo dnf install ./vaela-desktop-1.3.0-1.fc45.x86_64.rpm
 ```
 
 Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so
@@ -225,6 +225,12 @@ qdbus-qt6 org.vaela.Shell /Shell setBackground 2 file:///home/you/Videos/rain.we
 ```
 
 ## Customizing
+
+Vaela keeps its Plasma shell layout and panel settings in
+`~/.config/vaela-plasma/`. The regular Plasma session uses `~/.config/`.
+Existing shell settings are copied on Vaela's first launch; other user settings
+are inherited as defaults. This separation does not change system account files
+or their permissions.
 
 Open **Vaela Settings** (Meta+Ctrl+S, the gear in the layout switch, or the
 radial menu) to set the gap between windows, choose workspace backgrounds, turn
