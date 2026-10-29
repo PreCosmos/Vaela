@@ -16,6 +16,28 @@ s=json.load(open(sys.argv[1]))
 assert s['mode']=='Float' and s['desktops'],s
 assert s.get('version')==os.environ['VAELA_TEST_VERSION'],s
 PY
+# A competing tiler can load after Vaela or be restarted by KWin reconfigure.
+# Its saved enable flag must survive, and unrelated scripts must stay loaded.
+printf '// harmless fixture\n' > "$XDG_RUNTIME_DIR/tiler-fixture.js"
+kwriteconfig6 --file kwinrc --group Plugins --key karouselEnabled true
+qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$XDG_RUNTIME_DIR/tiler-fixture.js" karousel
+qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$XDG_RUNTIME_DIR/tiler-fixture.js" vaela-unrelated-test
+qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.start
+sleep 1.5
+[ "$(qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded karousel)" = false ]
+[ "$(qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded vaela-unrelated-test)" = true ]
+[ "$(kreadconfig6 --file kwinrc --group Plugins --key karouselEnabled)" = true ]
+# Opting out allows Karousel to load; opting back in suspends it immediately.
+kwriteconfig6 --file vaelarc --group General --key SuspendKarousel false
+qdbus-qt6 org.vaela.Controller /Controller org.vaela.Controller.reload
+qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$XDG_RUNTIME_DIR/tiler-fixture.js" karousel
+qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.start
+sleep 1.5
+[ "$(qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded karousel)" = true ]
+kwriteconfig6 --file vaelarc --group General --key SuspendKarousel true
+qdbus-qt6 org.vaela.Controller /Controller org.vaela.Controller.reload
+sleep .2
+[ "$(qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded karousel)" = false ]
 # The window tests use fixed delays; start them once the shell has compiled its QML and
 # shown the workspace bar's edge handle, so its start-up does not compete with them.
 for i in {1..100}; do

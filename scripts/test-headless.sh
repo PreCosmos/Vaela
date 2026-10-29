@@ -27,4 +27,4 @@ export VAELA_TEST_VERSION="$(sed -n 's/^project(vaela VERSION \([^ ]*\).*/\1/p' 
 export VAELA_SESSION=1 QT_QPA_PLATFORM=offscreen LIBGL_ALWAYS_SOFTWARE=1 KWIN_COMPOSE=Q
 # Pin one workspace so the add/rename/remove assertions use a known ID.
 printf '[Desktops]\nNumber=1\nRows=1\n' > "$scratch/config/kwinrc"
-timeout 25 dbus-run-session -- kwin_wayland --virtual --no-lockscreen --width 1280 --height 800 --exit-with-session "$PWD/tests/session.sh"
+timeout 45 dbus-run-session -- kwin_wayland --virtual --no-lockscreen --width 1280 --height 800 --exit-with-session "$PWD/tests/session.sh"

@@ -693,6 +693,14 @@ QtObject {
                                 }
                             }
                             Card {
+                                title: "Window management"
+                                subtitle: "Karousel and Vaela both arrange windows. Suspend Karousel during Vaela sessions to prevent repeated resizing. Its Plasma setting is preserved. Turning this off allows it to load again at the next login or KWin reconfigure."
+                                SettingRow {
+                                    label: "Suspend Karousel in Vaela"
+                                    Switch {checked: vaela.suspendKarousel; onToggled: vaela.setting("SuspendKarousel",checked)}
+                                }
+                            }
+                            Card {
                                 title: "Keyboard shortcuts"
                                 subtitle: "Click a shortcut, then press the new keys. Esc cancels, Backspace removes it. Layout keys take over Plasma's keys only in the layouts named."
                                 Repeater {

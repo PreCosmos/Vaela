@@ -58,19 +58,19 @@ Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 4
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 
 ```bash
-rpm-ostree install ./vaela-desktop-1.3.0-1.fc45.x86_64.rpm
+rpm-ostree install ./vaela-desktop-1.3.1-1.fc45.x86_64.rpm
 ```
 
 Replacing an earlier local build (including the old `vela-desktop` package):
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.3.0-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.3.1-1.fc45.x86_64.rpm
 ```
 
 **Fedora Workstation**
 
 ```bash
-sudo dnf install ./vaela-desktop-1.3.0-1.fc45.x86_64.rpm
+sudo dnf install ./vaela-desktop-1.3.1-1.fc45.x86_64.rpm
 ```
 
 Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so
@@ -106,6 +106,11 @@ A window stays on its monitor until you drag it to another or use KWin's
 peeks past its edge, is cut off at that edge rather than showing on the next
 monitor, and clicks there go to that monitor's own windows. In Auto Tiling an uneven
 last row shares the full width, so the gap you set is the only space between windows.
+
+Karousel is suspended while the Vaela session runs, so two tiling managers cannot
+repeatedly resize the same windows. Its saved Plasma setting stays unchanged.
+This protection can be turned off under **Window management** in Vaela Settings.
+Dialogs and other transient windows stay floating.
 
 ### Workspaces
 
@@ -160,6 +165,10 @@ and **Shift+right-click** skips Vaela entirely.
 In Scrollable and Auto Tiling, Vaela's layout keys (Meta+arrows, Meta+Plus/Minus
 and Ctrl+Meta+arrows) take priority over Plasma's quick tiling, zoom and workspace
 keys that use the same combinations.
+
+F2 opens Quick Commands by default. To use F2 for file renaming instead, change
+or remove the Quick Commands binding in Vaela Settings. Dolphin's Rename menu
+action also works with the default binding.
 
 Every key in the table can be changed under **Keyboard shortcuts** in Vaela
 Settings: click a shortcut and press the new keys (**Esc** cancels, **Backspace**

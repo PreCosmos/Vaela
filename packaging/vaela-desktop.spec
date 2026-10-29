@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.3.0
+Version:        1.3.1
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -91,6 +91,12 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Thu Oct 29 2026 Vaela contributors - 1.3.1-1
+- Suspend Karousel only in the running Vaela session to prevent competing resizes.
+- Add a setting to control Karousel suspension without changing Plasma settings.
+- Keep F2 for Quick Commands; all shortcut bindings remain customizable.
+- Keep transient windows floating and avoid redundant layout geometry requests.
+
 * Tue Oct 27 2026 Vaela contributors - 1.3.0-1
 - Isolate Vaela's Plasma shell layout and panel state from the regular Plasma session.
 - Restore the previous Plasma wallpaper when migrating an older shared layout.

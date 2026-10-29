@@ -33,6 +33,7 @@ class Bridge : public QObject {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.vaela.Shell")
     Q_PROPERTY(QVariantMap state READ state NOTIFY changed)
+    Q_PROPERTY(bool suspendKarousel READ suspendKarousel NOTIFY changed)
     Q_PROPERTY(bool gestures READ gestures NOTIFY changed)
     Q_PROPERTY(int threshold READ threshold NOTIFY changed)
     Q_PROPERTY(int gap READ gap NOTIFY changed)
@@ -49,6 +50,7 @@ class Bridge : public QObject {
     int backgroundCount=-1;
 public:
     QVariantMap state() const {return data;}
+    bool suspendKarousel() const {return KConfigGroup(config,"General").readEntry("SuspendKarousel",true);}
     bool gestures() const {return KConfigGroup(config,"General").readEntry("Gestures",true);}
     int threshold() const {return KConfigGroup(config,"General").readEntry("Threshold",28);}
     int gap() const {return KConfigGroup(config,"General").readEntry("Gap",8);}
@@ -146,7 +148,7 @@ for (const d of desktops()) {
     }
     Q_INVOKABLE void setting(QString key,QVariant value) {
         if(!QStringList{"Gestures","Threshold","Gap","Dark","RadialDelay","Monitors","BackgroundTransition","PauseWhenCovered","PauseWhenWindows",
-                        "KeepAudible","PauseOnBattery"}.contains(key)) return;
+                        "KeepAudible","PauseOnBattery","SuspendKarousel"}.contains(key)) return;
         KConfigGroup(config,"General").writeEntry(key,value);config->sync();call("reload");emit changed();
     }
     Q_INVOKABLE void launch(QString name) {

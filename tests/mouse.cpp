@@ -9,17 +9,24 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QTest>
+#include <QFile>
+#include <QProcess>
+#include <QTemporaryDir>
+#include <QDir>
+#include <QFileInfo>
+#include <linux/input-event-codes.h>
 class ContextWindow : public QWidget {
     Q_OBJECT
 public:
     QMenu menu;
     int shown=0,hidden=0;
-    bool closed=false;int presses=0,releases=0;
+    bool closed=false;int presses=0,releases=0,f2Presses=0;
     ContextWindow() {
         setWindowTitle("Vaela mouse test");resize(400,300);menu.addAction("Test context menu");
         connect(&menu,&QMenu::aboutToShow,this,[this]{++shown;});connect(&menu,&QMenu::aboutToHide,this,[this]{++hidden;});
     }
 protected:
+    void keyPressEvent(QKeyEvent *event) override {if(event->key()==Qt::Key_F2) ++f2Presses;QWidget::keyPressEvent(event);}
     void mousePressEvent(QMouseEvent *event) override {if(event->button()==Qt::RightButton) ++presses;QWidget::mousePressEvent(event);}
     void mouseReleaseEvent(QMouseEvent *event) override {if(event->button()==Qt::RightButton) ++releases;QWidget::mouseReleaseEvent(event);}
     void contextMenuEvent(QContextMenuEvent *event) override {menu.popup(event->globalPos());}
@@ -40,6 +47,54 @@ class MouseTest : public QObject {
 private Q_SLOTS:
     void initTestCase() {
         QVERIFY(probe.isValid());controller.call("addDesktop");controller.call("desktop",1);window.show();QTest::qWait(300);
+    }
+    void renameShortcutAndCustomization() {
+        QVERIFY(probe.call("hover",window.windowTitle()).arguments().first().toBool());
+        QTest::qWait(150);
+        auto tap=[&](int code) {probe.call("key",code,true);probe.call("key",code,false);};
+        tap(KEY_F2);
+        QTRY_VERIFY(probe.call("sized",600,520).arguments().first().toString()!="{}");
+        QDBusInterface shell("org.vaela.Shell","/Shell","org.vaela.Shell");
+        shell.call("showView","dismiss",0,0);
+        auto shortcuts=[&] {
+            return QJsonDocument::fromJson(controller.call("state").arguments().first().toString().toUtf8()).object()["shortcuts"].toArray();
+        };
+        for(auto value:shortcuts()) if(value.toObject()["id"]=="Quick Commands") {
+            QCOMPARE(value.toObject()["default"].toString(),QString("F2"));
+            QCOMPARE(value.toObject()["keys"].toString(),QString("F2"));
+        }
+        controller.call("setShortcut","Quick Commands","Meta+Ctrl+F3",false);
+        probe.call("key",KEY_LEFTMETA,true);probe.call("key",KEY_LEFTCTRL,true);tap(KEY_F3);
+        probe.call("key",KEY_LEFTCTRL,false);probe.call("key",KEY_LEFTMETA,false);
+        QTRY_VERIFY(probe.call("sized",600,520).arguments().first().toString()!="{}");
+        shell.call("showView","dismiss",0,0);
+        controller.call("setShortcut","Quick Commands","",false);
+        QVERIFY(probe.call("hover",window.windowTitle()).arguments().first().toBool());QTest::qWait(100);
+        tap(KEY_F2);QTRY_COMPARE(window.f2Presses,1);
+        controller.call("setShortcut","Quick Commands","F2",false);
+    }
+    void dolphinFileRename() {
+        // F2 is Quick Commands by default; remapping it lets Dolphin receive F2 instead.
+        controller.call("setShortcut","Quick Commands","Meta+Ctrl+F3",false);
+        QTemporaryDir folder(QDir::tempPath()+"/vaela-rename-XXXXXX");
+        QVERIFY(folder.isValid());
+        QFile file(folder.path()+"/original.txt");QVERIFY(file.open(QIODevice::WriteOnly));file.close();
+        QProcess dolphin;
+        dolphin.start("dolphin",{"--new-window",folder.path()});
+        QVERIFY(dolphin.waitForStarted());
+        const QString caption=QFileInfo(folder.path()).fileName()+QStringLiteral(" — Dolphin");
+        QTRY_VERIFY_WITH_TIMEOUT(probe.call("hover",caption).arguments().first().toBool(),5000);
+        QTest::qWait(500);
+        auto tap=[&](int code) {probe.call("key",code,true);probe.call("key",code,false);};
+        probe.call("key",KEY_LEFTCTRL,true);tap(KEY_A);probe.call("key",KEY_LEFTCTRL,false);
+        tap(KEY_F2);QTest::qWait(250);
+        // Dolphin selects the basename and keeps the extension when F2 opens Rename.
+        for(int code:{KEY_R,KEY_E,KEY_N,KEY_A,KEY_M,KEY_E,KEY_D}) tap(code);
+        tap(KEY_ENTER);
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(folder.path()+"/renamed.txt"),3000);
+        QVERIFY(!QFile::exists(folder.path()+"/original.txt"));
+        dolphin.terminate();dolphin.waitForFinished();
+        controller.call("setShortcut","Quick Commands","F2",false);
     }
     void workspaceGesturesThroughInputChain() {
         // Blank space, away from the application window and Vaela's panels.

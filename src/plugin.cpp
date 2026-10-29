@@ -9,6 +9,8 @@
 #include <pointer_input.h>
 #include <workspace.h>
 #include <window.h>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <virtualdesktops.h>
 #include <wayland_server.h>
 #include <wayland/seat.h>
@@ -36,13 +38,13 @@ class Vaela : public Plugin, public InputEventFilter {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.vaela.Controller")
     KSharedConfig::Ptr config = KSharedConfig::openConfig("vaelarc");
-    QTimer hold, layoutTimer, backgroundTimer;
+    QTimer hold, layoutTimer, backgroundTimer, tilerGuardTimer;
     QString lastBackgrounds;
     QElapsedTimer hoverClock;
     Gesture gesture;
     QPointer<Window> target, lastWindow;
     QPointer<LogicalOutput> radialOutput; // where a held right button opened the radial menu
-    bool down = false, radial = false, arranging = false;
+    bool down = false, radial = false, arranging = false, tilerCheckPending = false;
     QHash<Window *, RectF> floating;
     QHash<Window *, double> scrollWidths;
     QHash<QString, QVector<double>> columns, rows, lastRows; // lastRows: an incomplete last row's own widths
@@ -204,6 +206,21 @@ class Vaela : public Plugin, public InputEventFilter {
     static bool modifierKey(Qt::Key key) {
         return QList<Qt::Key>{Qt::Key_Shift,Qt::Key_Control,Qt::Key_Meta,Qt::Key_Alt,Qt::Key_AltGr,Qt::Key_Super_L,Qt::Key_Super_R,Qt::Key_Hyper_L,Qt::Key_Hyper_R}.contains(key);
     }
+    // Karousel writes geometry in response to our moves. Suspend its runtime instance only:
+    // changing kwinrc here would also disable it in the user's ordinary Plasma session.
+    void suspendKarousel() {
+        if(tilerCheckPending || !KConfigGroup(config,"General").readEntry("SuspendKarousel",true)) return;
+        auto call=QDBusMessage::createMethodCall("org.kde.KWin","/Scripting","org.kde.kwin.Scripting","unloadScript");
+        call.setArguments({QStringLiteral("karousel")});
+        tilerCheckPending=true;
+        auto watcher=new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(call),this);
+        connect(watcher,&QDBusPendingCallWatcher::finished,this,[this,watcher]{
+            const QDBusPendingReply<bool> reply=*watcher;
+            tilerCheckPending=false;
+            if(!reply.isError() && reply.value()) schedule();
+            watcher->deleteLater();
+        });
+    }
     void schedule() { backgroundTimer.start(); if(!arranging) layoutTimer.start(); }
     QString backgroundKey(VirtualDesktop *desktop) const {return activity()+":"+desktop->id();}
     VirtualDesktop *desktopById(int id) const {
@@ -248,7 +265,7 @@ class Vaela : public Plugin, public InputEventFilter {
     }
     bool appWindow(Window *w) const { return w && w->isNormalWindow() && !w->isSpecialWindow() && !w->isInternal() && !w->inherits("KWin::LayerShellV1Window") && w->resourceClass()!="vaela-shell"; }
     bool eligible(Window *w) const {
-        return appWindow(w) && w->isMovable() && w->isResizable()
+        return appWindow(w) && !w->isTransient() && w->isMovable() && w->isResizable()
             && w->isOnCurrentDesktop() && w->isOnCurrentActivity() && !w->isOnAllDesktops()
             && !w->isMinimized() && !w->isFullScreen();
     }
@@ -358,7 +375,9 @@ class Vaela : public Plugin, public InputEventFilter {
                 RectF r(area.x()+x-offset,area.y()+ys[i/cols],width,heights[i/cols]);
                 placed[w]=r.topLeft();
                 w->setProperty("vaelaHome",output->name());
-                w->moveResize(r);
+                // Compare the requested geometry, not the last buffer a Wayland client committed.
+                // A slow client may still be acknowledging an earlier configure.
+                if(w->moveResizeGeometry()!=r) w->moveResize(r);
             }
         }
         arranging=false;
@@ -386,6 +405,12 @@ public:
     Vaela() : InputEventFilter(InputFilterOrder::TabBox) {
         if(qEnvironmentVariable("VAELA_SESSION")!="1") return;
         input()->installInputEventFilter(this);
+        // Scripts finish loading asynchronously and can be restarted by KWin reconfigure.
+        // Check outside their geometry callbacks so unloading cannot delete a running script.
+        tilerGuardTimer.setInterval(1000);
+        connect(&tilerGuardTimer,&QTimer::timeout,this,&Vaela::suspendKarousel);
+        tilerGuardTimer.start();
+        QTimer::singleShot(0,this,&Vaela::suspendKarousel);
         QDBusConnection::sessionBus().registerService("org.vaela.Controller");
         QDBusConnection::sessionBus().registerObject("/Controller",this,QDBusConnection::ExportAllSlots|QDBusConnection::ExportAllSignals);
         connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;target=nullptr;capturedKeys.clear();recording.clear();backgroundTimer.start();});
@@ -409,7 +434,8 @@ public:
         connect(workspace(),&Workspace::windowRemoved,this,[this](Window*w){
             windowOrder.removeAll(w);floating.remove(w);scrollWidths.remove(w);resizing.remove(w);moving.remove(w);homes.remove(w);placed.remove(w);schedule();
         });
-        connect(workspace(),&Workspace::windowActivated,this,[this](Window *w){if(appWindow(w)) {lastWindow=w;focused[home(w)]=w;}schedule();});
+        // A transient dialog must not replace its parent's column as the strip's focus.
+        connect(workspace(),&Workspace::windowActivated,this,[this](Window *w){if(appWindow(w) && !w->isTransient()) {lastWindow=w;focused[home(w)]=w;}schedule();});
         lastWindow=workspace()->activeWindow();
         connect(workspace(),&Workspace::currentDesktopChanged,this,[this]{schedule();});
         connect(workspace(),&Workspace::currentActivityChanged,this,[this]{schedule();});
@@ -508,7 +534,7 @@ public:
         return true;
     }
 public Q_SLOTS:
-    void reload() {config->reparseConfiguration();schedule();}
+    void reload() {config->reparseConfiguration();suspendKarousel();schedule();}
     QString state() {
         if(locked()) return "{}";
         QJsonArray desks;

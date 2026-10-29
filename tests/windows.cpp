@@ -9,7 +9,7 @@
 #include <QJsonArray>
 int main(int argc,char **argv) {
     QGuiApplication app(argc,argv);
-    QQuickWindow a,b,c;
+    QQuickWindow a,b,c,transient;
     int i=0;
     for(auto w:{&a,&b,&c}) {w->setTitle(QStringLiteral("Vaela test %1").arg(++i));w->resize(400,300);w->setColor(Qt::darkBlue);w->show();}
     QDBusInterface controller("org.vaela.Controller","/Controller","org.vaela.Controller");
@@ -39,7 +39,13 @@ int main(int argc,char **argv) {
         probe.call("hover",c.title());
         controller.call("setMode","Scrollable");
     });
+    QTimer::singleShot(2800,[&]{
+        transient.setTitle("Vaela transient test");transient.setTransientParent(&c);
+        transient.resize(320,180);transient.show();
+    });
     QTimer::singleShot(3200,[&]{
+        check(transient.size()==QSize(320,180),"Transient window was tiled as a column");
+        transient.close();
         for(auto w:{&a,&b,&c}) check(w->width()>750 && w->width()<900 && w->height()>650,"Scrollable did not create full-height columns");
         controller.call("action","narrow");
     });
