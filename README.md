@@ -58,19 +58,19 @@ Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 4
 **Fedora Atomic (Bazzite, Kinoite, Silverblue)**
 
 ```bash
-rpm-ostree install ./vaela-desktop-1.3.1-1.fc45.x86_64.rpm
+rpm-ostree install ./vaela-desktop-1.3.2-1.fc45.x86_64.rpm
 ```
 
 Replacing an earlier local build (including the old `vela-desktop` package):
 
 ```bash
-rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.3.1-1.fc45.x86_64.rpm
+rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.3.2-1.fc45.x86_64.rpm
 ```
 
 **Fedora Workstation**
 
 ```bash
-sudo dnf install ./vaela-desktop-1.3.1-1.fc45.x86_64.rpm
+sudo dnf install ./vaela-desktop-1.3.2-1.fc45.x86_64.rpm
 ```
 
 Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so
@@ -134,7 +134,9 @@ one it does).
 ### Mouse gestures
 
 Hold the right button and draw. A quick right-click still opens context menus,
-and **Shift+right-click** skips Vaela entirely.
+and **Shift+right-drag** passes camera controls through to the application.
+Shift can be pressed before or after the right button; the drag stays passed through
+until the button is released, even if Shift is released first.
 
 | Stroke | Default action |
 |---|---|

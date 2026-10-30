@@ -44,7 +44,7 @@ class Vaela : public Plugin, public InputEventFilter {
     Gesture gesture;
     QPointer<Window> target, lastWindow;
     QPointer<LogicalOutput> radialOutput; // where a held right button opened the radial menu
-    bool down = false, radial = false, arranging = false, tilerCheckPending = false;
+    bool down = false, radial = false, passthroughRight = false, arranging = false, tilerCheckPending = false;
     QHash<Window *, RectF> floating;
     QHash<Window *, double> scrollWidths;
     QHash<QString, QVector<double>> columns, rows, lastRows; // lastRows: an incomplete last row's own widths
@@ -158,6 +158,17 @@ class Vaela : public Plugin, public InputEventFilter {
         auto seat=waylandServer()->seat();
         seat->notifyPointerButton(Qt::RightButton,PointerButtonState::Pressed);seat->notifyPointerFrame();
         seat->notifyPointerButton(Qt::RightButton,PointerButtonState::Released);seat->notifyPointerFrame();
+    }
+    // A gesture's press was withheld from the client. Hand it back once, then let
+    // KWin forward the real motion/release (including relative-pointer input).
+    void passRightDrag() {
+        stopHold();
+        if(radial) ui("dismiss",gesture.start,radialOutput);
+        down=false;radial=false;target=nullptr;
+        if(pressUnseen) {swallowed.insert(int(Qt::RightButton));return;}
+        passthroughRight=true;
+        auto seat=waylandServer()->seat();
+        seat->notifyPointerButton(Qt::RightButton,PointerButtonState::Pressed);seat->notifyPointerFrame();
     }
     // oldDefault: a shortcut this action used to ship with; a saved copy of it moves to the new key.
     void shortcut(QString id, QString key, std::function<void()> fn, QString oldDefault = {}) {
@@ -413,7 +424,7 @@ public:
         QTimer::singleShot(0,this,&Vaela::suspendKarousel);
         QDBusConnection::sessionBus().registerService("org.vaela.Controller");
         QDBusConnection::sessionBus().registerObject("/Controller",this,QDBusConnection::ExportAllSlots|QDBusConnection::ExportAllSignals);
-        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;target=nullptr;capturedKeys.clear();recording.clear();backgroundTimer.start();});
+        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;passthroughRight=false;target=nullptr;capturedKeys.clear();recording.clear();backgroundTimer.start();});
         // Window moves and resizes arrive in bursts; the wallpaper hears the outcome once.
         backgroundTimer.setSingleShot(true); backgroundTimer.setInterval(60);
         connect(&backgroundTimer,&QTimer::timeout,this,&Vaela::updateBackgrounds);
@@ -456,6 +467,8 @@ public:
     bool keyboardKey(KeyboardKeyEvent *e) override {
         if(qEnvironmentVariable("VAELA_SESSION")!="1" || locked()) return false;
         if(e->state==KeyboardKeyState::Released) return capturedKeys.remove(e->nativeScanCode)>0;
+        if(down && e->key==Qt::Key_Shift) passRightDrag();
+        if(passthroughRight) return false;
         // The same modifiers KWin matches global shortcuts with, so a recorded key works as one.
         const auto modifiers=e->modifiersRelevantForGlobalShortcuts & ~Qt::KeypadModifier;
         if(!recording.isEmpty() && !modifierKey(e->key)) {
@@ -476,7 +489,11 @@ public:
     }
     bool pointerButton(PointerButtonEvent *e) override {
         if(qEnvironmentVariable("VAELA_SESSION")!="1") return false;
-        if(locked()) {stopHold();down=false;radial=false;return false;}
+        if(locked()) {stopHold();down=false;radial=false;passthroughRight=false;return false;}
+        if(passthroughRight) {
+            if(e->button==Qt::RightButton && e->state==PointerButtonState::Released) passthroughRight=false;
+            return false;
+        }
         // Where nothing of this monitor lies under the pointer, a window reaching over from another
         // monitor would get the click though it is not drawn here; the click goes nowhere instead.
         if(e->state==PointerButtonState::Released && swallowed.remove(int(e->button))) return true;
@@ -485,6 +502,9 @@ public:
         if(e->button!=Qt::RightButton) return false;
         if(e->state==PointerButtonState::Pressed) {
             config->reparseConfiguration();
+            if(e->modifiers.testFlag(Qt::ShiftModifier) && !unseen) {
+                passthroughRight=true;return false;
+            }
             if(!KConfigGroup(config,"General").readEntry("Gestures",true) || e->modifiers.testFlag(Qt::ShiftModifier)
                 || !covers(workspace()->outputAt(e->position))) {
                 if(unseen) swallowed.insert(int(e->button));
@@ -517,9 +537,11 @@ public:
         target=nullptr; return true;
     }
     bool pointerAxis(PointerAxisEvent *e) override {
-        return !locked() && overhang(input()->pointer()->focus(),e->position);
+        return !passthroughRight && !locked() && overhang(input()->pointer()->focus(),e->position);
     }
     bool pointerMotion(PointerMotionEvent *e) override {
+        if(passthroughRight) return false;
+        if(down && !locked() && e->modifiers.testFlag(Qt::ShiftModifier)) {passRightDrag();return false;}
         if(auto under=workspace()->outputAt(e->position); under!=pointerOutput) {pointerOutput=under;lowerOverhangs(under);}
         if(!down) return false;
         if(locked()) {down=false;stopHold();return false;}

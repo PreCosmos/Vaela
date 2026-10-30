@@ -20,7 +20,7 @@ class ContextWindow : public QWidget {
 public:
     QMenu menu;
     int shown=0,hidden=0;
-    bool closed=false;int presses=0,releases=0,f2Presses=0;
+    bool closed=false;int presses=0,releases=0,f2Presses=0,rightMoves=0,shiftMoves=0;
     ContextWindow() {
         setWindowTitle("Vaela mouse test");resize(400,300);menu.addAction("Test context menu");
         connect(&menu,&QMenu::aboutToShow,this,[this]{++shown;});connect(&menu,&QMenu::aboutToHide,this,[this]{++hidden;});
@@ -29,6 +29,10 @@ protected:
     void keyPressEvent(QKeyEvent *event) override {if(event->key()==Qt::Key_F2) ++f2Presses;QWidget::keyPressEvent(event);}
     void mousePressEvent(QMouseEvent *event) override {if(event->button()==Qt::RightButton) ++presses;QWidget::mousePressEvent(event);}
     void mouseReleaseEvent(QMouseEvent *event) override {if(event->button()==Qt::RightButton) ++releases;QWidget::mouseReleaseEvent(event);}
+    void mouseMoveEvent(QMouseEvent *event) override {
+        if(event->buttons().testFlag(Qt::RightButton)) {++rightMoves;if(event->modifiers().testFlag(Qt::ShiftModifier)) ++shiftMoves;}
+        QWidget::mouseMoveEvent(event);
+    }
     void contextMenuEvent(QContextMenuEvent *event) override {menu.popup(event->globalPos());}
     void closeEvent(QCloseEvent *event) override {closed=true;QWidget::closeEvent(event);}
 };
@@ -133,6 +137,30 @@ private Q_SLOTS:
         button(false);
         // Dismiss the overlay through a normal view change before testing hover targeting.
         QDBusInterface shell("org.vaela.Shell","/Shell","org.vaela.Shell");shell.call("showView","dismiss",0,0);
+    }
+    void shiftRightDragPassesThrough_data() {
+        QTest::addColumn<bool>("shiftFirst");QTest::addColumn<bool>("strokeFirst");
+        QTest::newRow("shift-before-right")<<true<<false;
+        QTest::newRow("shift-after-right")<<false<<false;
+        QTest::newRow("shift-after-stroke")<<false<<true;
+    }
+    void shiftRightDragPassesThrough() {
+        QFETCH(bool,shiftFirst);QFETCH(bool,strokeFirst);
+        window.setContextMenuPolicy(Qt::NoContextMenu);
+        QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
+        const int presses=window.presses,releases=window.releases,moves=window.rightMoves,shiftMoves=window.shiftMoves,current=desktop();
+        if(shiftFirst) probe.call("key",42,true);
+        button(true);
+        if(!shiftFirst) {QTest::qWait(50);if(strokeFirst) probe.call("relative",35.,0.);probe.call("key",42,true);}
+        QTest::qWait(100);probe.call("relative",35.,10.);
+        QTRY_VERIFY(window.shiftMoves>shiftMoves);
+        QTest::qWait(650);QVERIFY(!probe.call("radialVisible").arguments().first().toBool());
+        probe.call("key",42,false);
+        QTest::qWait(50);probe.call("relative",35.,10.);
+        QTRY_VERIFY(window.rightMoves>=moves+2);
+        button(false);QTRY_COMPARE(window.releases,releases+1);
+        QCOMPARE(window.presses,presses+1);QCOMPARE(desktop(),current);QVERIFY(!window.closed);
+        window.setContextMenuPolicy(Qt::DefaultContextMenu);
     }
     void downGestureClosesHoveredWindow() {
         QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);

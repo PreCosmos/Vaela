@@ -15,7 +15,7 @@ mkdir -p "$TOP/SOURCES" rpms
 # so the packaged directories come out as plain 0755.
 chmod -R g-s "$TOP"
 
-tar --exclude-vcs --exclude=./build --exclude=./rpms --exclude=./.devbox \
+tar --exclude-vcs --exclude='*/__pycache__' --exclude=./build --exclude=./rpms --exclude=./.devbox \
     --mode=g-s --transform "s,^\.,vaela-desktop-$VERSION," \
     -czf "$TOP/SOURCES/vaela-desktop-$VERSION.tar.gz" .
 
