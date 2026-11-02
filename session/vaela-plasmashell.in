@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 """Keep Vaela's Plasma layout out of the regular Plasma configuration."""
+import configparser
 import os
 from pathlib import Path
 import shutil
@@ -41,6 +42,38 @@ def restore_plasma_wallpaper(text):
     return "".join(blocks)
 
 
+def merge_mimeapps(private, base):
+    # Apps started from the shell inherit its config home and may save handlers there. KDE's
+    # shared application database records every mimeapps.list it can see, so one that only the
+    # shell sees makes it and the rest of the session rebuild the database for each other forever.
+    for source in private.glob("*mimeapps.list"):
+        target = base / source.name
+        merged = configparser.RawConfigParser(strict=False, delimiters=("=",))
+        merged.optionxform = str
+        added = configparser.RawConfigParser(strict=False, delimiters=("=",))
+        added.optionxform = str
+        try:
+            merged.read(target)
+            added.read(source)
+        except configparser.Error:
+            source.replace(source.with_name(source.name + ".invalid"))
+            continue
+        changed = False
+        for section in added.sections():
+            if not merged.has_section(section):
+                merged.add_section(section)
+            for key, value in added.items(section):
+                if not merged.has_option(section, key):
+                    merged.set(section, key, value)
+                    changed = True
+        if changed:
+            temporary = target.with_name(target.name + ".vaela-new")
+            with temporary.open("w") as file:
+                merged.write(file, space_around_delimiters=False)
+            temporary.replace(target)
+        source.unlink()
+
+
 def configure(vaela):
     base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     private = base / "vaela-plasma"
@@ -64,6 +97,7 @@ def configure(vaela):
             shutil.copy2(layout, backup)
         layout.write_text(restored)
     if vaela:
+        merge_mimeapps(private, base)
         os.environ["XDG_CONFIG_HOME"] = str(private)
         os.environ["XDG_CONFIG_DIRS"] = str(base) + ":" + os.environ.get("XDG_CONFIG_DIRS", "/etc/xdg")
 

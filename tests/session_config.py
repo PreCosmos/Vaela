@@ -73,6 +73,18 @@ class SessionConfigTest(unittest.TestCase):
         self.assertEqual(os.environ["XDG_CONFIG_HOME"], str(self.private))
         self.assertTrue(os.environ["XDG_CONFIG_DIRS"].startswith(str(self.base) + ":"))
 
+    def test_private_mimeapps_merges_into_the_shared_file(self):
+        self.private.mkdir()
+        (self.base / "mimeapps.list").write_text("[Default Applications]\ntext/plain=kate.desktop;\n")
+        (self.private / "mimeapps.list").write_text(
+            "\n[Default Applications]\ntext/plain=other.desktop\nx-scheme-handler/codex=chatgpt.desktop\n")
+        launcher.configure(True)
+        self.assertFalse((self.private / "mimeapps.list").exists())
+        merged = (self.base / "mimeapps.list").read_text()
+        self.assertIn("text/plain=kate.desktop;\n", merged)
+        self.assertNotIn("other.desktop", merged)
+        self.assertIn("x-scheme-handler/codex=chatgpt.desktop\n", merged)
+
     def test_compositor_environment_overrides_stale_manager_marker(self):
         os.environ["VAELA_SESSION"] = "1"
         with patch.object(launcher.subprocess, "check_output", return_value=b"42\n"), \
