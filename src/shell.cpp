@@ -35,6 +35,7 @@ class Bridge : public QObject {
     Q_PROPERTY(QVariantMap state READ state NOTIFY changed)
     Q_PROPERTY(bool suspendKarousel READ suspendKarousel NOTIFY changed)
     Q_PROPERTY(bool gestures READ gestures NOTIFY changed)
+    Q_PROPERTY(QString rightButtonApps READ rightButtonApps NOTIFY changed)
     Q_PROPERTY(int threshold READ threshold NOTIFY changed)
     Q_PROPERTY(int gap READ gap NOTIFY changed)
     Q_PROPERTY(QVariantMap bindings READ bindings NOTIFY changed)
@@ -52,6 +53,7 @@ public:
     QVariantMap state() const {return data;}
     bool suspendKarousel() const {return KConfigGroup(config,"General").readEntry("SuspendKarousel",true);}
     bool gestures() const {return KConfigGroup(config,"General").readEntry("Gestures",true);}
+    QString rightButtonApps() const {return KConfigGroup(config,"General").readEntry("RightButtonApps",QStringLiteral("UnrealEditor"));}
     int threshold() const {return KConfigGroup(config,"General").readEntry("Threshold",28);}
     int gap() const {return KConfigGroup(config,"General").readEntry("Gap",8);}
     int radialDelay() const {return std::clamp(KConfigGroup(config,"General").readEntry("RadialDelay",500),150,2000);}
@@ -148,7 +150,7 @@ for (const d of desktops()) {
     }
     Q_INVOKABLE void setting(QString key,QVariant value) {
         if(!QStringList{"Gestures","Threshold","Gap","Dark","RadialDelay","Monitors","BackgroundTransition","PauseWhenCovered","PauseWhenWindows",
-                        "KeepAudible","PauseOnBattery","SuspendKarousel"}.contains(key)) return;
+                        "KeepAudible","PauseOnBattery","SuspendKarousel","RightButtonApps"}.contains(key)) return;
         KConfigGroup(config,"General").writeEntry(key,value);config->sync();call("reload");emit changed();
     }
     Q_INVOKABLE void launch(QString name) {

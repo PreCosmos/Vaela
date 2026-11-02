@@ -162,6 +162,22 @@ private Q_SLOTS:
         QCOMPARE(window.presses,presses+1);QCOMPARE(desktop(),current);QVERIFY(!window.closed);
         window.setContextMenuPolicy(Qt::DefaultContextMenu);
     }
+    void listedAppKeepsPlainRightDrag() {
+        const auto key=QStringList{"--file","vaelarc","--group","General","--key","RightButtonApps"};
+        QProcess::execute("kwriteconfig6",key+QStringList{QFileInfo(QCoreApplication::applicationFilePath()).fileName()});
+        window.setContextMenuPolicy(Qt::NoContextMenu);
+        QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
+        const int presses=window.presses,releases=window.releases,moves=window.rightMoves,shiftMoves=window.shiftMoves,current=desktop();
+        // The press arrives at once, with no Shift, and the stroke is not a gesture.
+        button(true);QTRY_COMPARE(window.presses,presses+1);
+        probe.call("relative",35.,0.);QTest::qWait(50);probe.call("relative",35.,0.);
+        QTRY_VERIFY(window.rightMoves>moves);
+        QTest::qWait(650);QVERIFY(!probe.call("radialVisible").arguments().first().toBool());
+        button(false);QTRY_COMPARE(window.releases,releases+1);
+        QCOMPARE(window.shiftMoves,shiftMoves);QCOMPARE(desktop(),current);
+        window.setContextMenuPolicy(Qt::DefaultContextMenu);
+        QProcess::execute("kwriteconfig6",key+QStringList{"--delete"});
+    }
     void downGestureClosesHoveredWindow() {
         QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
         button(true);

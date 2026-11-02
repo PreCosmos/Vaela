@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.3.2
+Version:        1.3.3
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -91,6 +91,9 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Mon Nov 02 2026 Vaela contributors - 1.3.3-1
+- Add a list of apps that keep the right button, starting with Unreal Editor, whose camera ignores Shift + right-drag.
+
 * Fri Oct 30 2026 Vaela contributors - 1.3.2-1
 - Pass Shift + right-drag through for application camera controls, including Shift pressed after the mouse button.
 

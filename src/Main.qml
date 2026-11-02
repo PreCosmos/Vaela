@@ -621,10 +621,14 @@ QtObject {
                             }
                             Card {
                                 title: "Mouse gestures"
-                                subtitle: "Hold the right button still for the radial menu, move onto an item and release to open it. A quick right-click opens the app's own menu. Draw with the right button for gestures. Shift + right-click skips Vaela."
+                                subtitle: "Hold the right button still for the radial menu, move onto an item and release to open it. A quick right-click opens the app's own menu. Draw with the right button for gestures. Shift + right-click skips Vaela, and listed apps always get the right button themselves."
                                 SettingRow {
                                     label: "Right-button gestures and radial menu"
                                     Switch {checked: vaela.gestures; onToggled: vaela.setting("Gestures",checked)}
+                                }
+                                SettingRow {
+                                    label: "Apps that keep the right button (comma-separated)"
+                                    TextField {text: vaela.rightButtonApps; placeholderText: "UnrealEditor"; Layout.preferredWidth: 200; onEditingFinished: vaela.setting("RightButtonApps",text)}
                                 }
                                 SettingRow {
                                     label: "Stroke length before a gesture starts"

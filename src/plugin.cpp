@@ -116,6 +116,16 @@ class Vaela : public Plugin, public InputEventFilter {
         rows[key]=Layout::resize(heights,index/nc,requested.height(),100);
     }
     QString appId(Window *w) const { auto id=w->desktopFileName(); return id.isEmpty() ? w->resourceClass() : id; }
+    // Apps that need the right button unmodified: Unreal's viewport camera turns off while Shift is held.
+    bool keepsRightButton(Window *w) const {
+        if(!w) return false;
+        for(const auto &entry:KConfigGroup(config,"General").readEntry("RightButtonApps",QStringLiteral("UnrealEditor")).split(',',Qt::SkipEmptyParts)) {
+            const auto app=entry.trimmed();
+            if(app.isEmpty()) continue;
+            for(const auto &id:{w->desktopFileName(),w->resourceClass(),w->resourceName()}) if(!id.compare(app,Qt::CaseInsensitive)) return true;
+        }
+        return false;
+    }
     // Scrollable column widths outlive their windows, per application, as a share of the screen width.
     double storedWidth(Window *w, const QRectF &area) const {
         const double share=KConfigGroup(config,"ScrollableWidths").readEntry(appId(w),0.);
@@ -502,7 +512,7 @@ public:
         if(e->button!=Qt::RightButton) return false;
         if(e->state==PointerButtonState::Pressed) {
             config->reparseConfiguration();
-            if(e->modifiers.testFlag(Qt::ShiftModifier) && !unseen) {
+            if((e->modifiers.testFlag(Qt::ShiftModifier) || keepsRightButton(input()->pointer()->focus())) && !unseen) {
                 passthroughRight=true;return false;
             }
             if(!KConfigGroup(config,"General").readEntry("Gestures",true) || e->modifiers.testFlag(Qt::ShiftModifier)

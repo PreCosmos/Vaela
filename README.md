@@ -138,6 +138,12 @@ and **Shift+right-drag** passes camera controls through to the application.
 Shift can be pressed before or after the right button; the drag stays passed through
 until the button is released, even if Shift is released first.
 
+Some applications need the right button without Shift: Unreal Editor turns its
+viewport camera off while Shift is held. Apps listed under *Apps that keep the right
+button* in Vaela Settings get every right-button press directly, with no gestures or
+radial menu over their windows. The list holds window classes or desktop file names
+and starts with `UnrealEditor`.
+
 | Stroke | Default action |
 |---|---|
 | ← / → | Previous / next workspace |
