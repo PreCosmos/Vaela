@@ -44,6 +44,11 @@ public Q_SLOTS:
         for(auto w:workspace()->windows()) if(w->caption()==caption) {workspace()->activateWindow(w);auto center=w->frameGeometry().center();motion(center.x(),center.y());return true;}
         return false;
     }
+    // Scrollable mode brings the active column into view on its next layout pass.
+    bool activate(const QString &caption) {
+        for(auto w:workspace()->windows()) if(w->caption()==caption) {workspace()->activateWindow(w);return true;}
+        return false;
+    }
     bool beginResize(const QString &caption) {
         for(auto w:workspace()->windows()) if(w->caption()==caption) {
             workspace()->activateWindow(w);

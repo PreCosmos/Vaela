@@ -20,9 +20,10 @@ public:
         if(view->logicalOutput() && foreign(w,view->logicalOutput()->geometryF())) data.setTranslucent();
         effects->prePaintWindow(view,w,data);
     }
-    void paintWindow(const RenderTarget &target, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &region, WindowPaintData &data) override {
-        if(foreign(w,viewport.renderRect())) return;
-        effects->paintWindow(target,viewport,w,mask,region,data);
+    // false reports a render failure and aborts the frame; a skipped window is not one.
+    bool paintWindow(const RenderTarget &target, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &region, WindowPaintData &data) override {
+        if(foreign(w,viewport.renderRect())) return true;
+        return effects->paintWindow(target,viewport,w,mask,region,data);
     }
 private:
     // Whether w is a tiled window and monitor is another one than its own. Thumbnails and window

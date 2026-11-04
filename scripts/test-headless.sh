@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build and exercise Vaela in a private, software-rendered 1280x800 KWin session.
+# Build and exercise Vaela in a private 1280x800 KWin session. KWin 6.8 composites only with OpenGL,
+# so this needs a GPU driver the container can use.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/fedora.sh
@@ -24,7 +25,7 @@ export QT_FORCE_STDERR_LOGGING=1
 export QT_LOGGING_RULES="qt.svg.warning=false"
 export VAELA_TEST_SESSION=1
 export VAELA_TEST_VERSION="$(sed -n 's/^project(vaela VERSION \([^ ]*\).*/\1/p' CMakeLists.txt)"
-export VAELA_SESSION=1 QT_QPA_PLATFORM=offscreen LIBGL_ALWAYS_SOFTWARE=1 KWIN_COMPOSE=Q
+export VAELA_SESSION=1 QT_QPA_PLATFORM=offscreen LIBGL_ALWAYS_SOFTWARE=1 KWIN_COMPOSE=O
 # Pin one workspace so the add/rename/remove assertions use a known ID.
 printf '[Desktops]\nNumber=1\nRows=1\n' > "$scratch/config/kwinrc"
 timeout 45 dbus-run-session -- kwin_wayland --virtual --no-lockscreen --width 1280 --height 800 --exit-with-session "$PWD/tests/session.sh"

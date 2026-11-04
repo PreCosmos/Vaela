@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.3.4
+Version:        1.3.5
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -91,6 +91,9 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Wed Nov 04 2026 Vaela contributors - 1.3.5-1
+- Build for Bazzite 45 with KWin 6.8, so the package installs there again.
+
 * Mon Nov 02 2026 Vaela contributors - 1.3.4-1
 - Fix constant desktop lag: merge a mimeapps.list left in the shell's private settings, which made KDE rebuild its application database nonstop.
 

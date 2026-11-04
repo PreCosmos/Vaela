@@ -4,6 +4,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/fedora.sh
+# The package requires the exact kwin version it was built against, so build against the
+# newest one the target system can install; a stale container yields an uninstallable RPM.
+if [ ! -e /run/.containerenv ]; then
+  podman start "$CONTAINER" >/dev/null
+  podman exec -u 0 "$CONTAINER" dnf upgrade -y --refresh >/dev/null
+fi
 run_in_container build-rpm.sh "$@"
 
 SPEC=packaging/vaela-desktop.spec

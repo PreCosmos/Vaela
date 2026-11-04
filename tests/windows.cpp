@@ -96,6 +96,8 @@ int main(int argc,char **argv) {
         check(!ra.intersects(rb) && !ra.intersects(rc) && !rb.intersects(rc),"Native tile resize left overlaps");
         controller.call("setMode","Scrollable");
     });
+    // KWin keeps the pointer on screen, so the column's corner must be in view before the drag.
+    QTimer::singleShot(9000,[&]{probe.call("activate",b.title());probe.call("activate",c.title());});
     QTimer::singleShot(9200,[&]{
         beforeA=a.width();beforeB=b.width();beforeC=c.width();
         check(probe.call("beginResize",c.title()).arguments().first().toBool(),"Could not begin native column resize");

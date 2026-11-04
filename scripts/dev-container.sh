@@ -36,3 +36,4 @@ fi
 podman start "$NAME" >/dev/null
 podman exec -u 0 "$NAME" dnf install -y --setopt=install_weak_deps=False \
   "${BUILD_PKGS[@]}" "${RUN_PKGS[@]}"
+podman exec -u 0 "$NAME" dnf upgrade -y --refresh
