@@ -178,6 +178,27 @@ private Q_SLOTS:
         window.setContextMenuPolicy(Qt::DefaultContextMenu);
         QProcess::execute("kwriteconfig6",key+QStringList{"--delete"});
     }
+    void viewportAppSharesRightButton() {
+        const auto key=QStringList{"--file","vaelarc","--group","General","--key","ViewportApps"};
+        QProcess::execute("kwriteconfig6",key+QStringList{QFileInfo(QCoreApplication::applicationFilePath()).fileName()});
+        window.setContextMenuPolicy(Qt::NoContextMenu);
+        QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
+        const int presses=window.presses,releases=window.releases,moves=window.rightMoves,current=desktop();
+        // The app gets the press at once and the whole drag, and a drawn stroke still runs its gesture.
+        button(true);QTRY_COMPARE(window.presses,presses+1);
+        probe.call("relative",40.,0.);QTest::qWait(50);probe.call("relative",40.,0.);
+        QTRY_VERIFY(window.rightMoves>moves);
+        QTest::qWait(650);QVERIFY(!probe.call("radialVisible").arguments().first().toBool());
+        button(false);QTRY_COMPARE(window.releases,releases+1);
+        QTRY_COMPARE(desktop(),current+1);
+        controller.call("desktop",current);QTRY_COMPARE(desktop(),current);
+        // Without a stroke nothing happens beyond the app's own click.
+        QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
+        button(true);QTest::qWait(50);button(false);QTRY_COMPARE(window.releases,releases+2);
+        QCOMPARE(window.presses,presses+2);QCOMPARE(desktop(),current);QVERIFY(!window.closed);
+        window.setContextMenuPolicy(Qt::DefaultContextMenu);
+        QProcess::execute("kwriteconfig6",key+QStringList{"--delete"});
+    }
     void downGestureClosesHoveredWindow() {
         QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
         button(true);

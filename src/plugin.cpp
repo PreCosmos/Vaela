@@ -45,6 +45,10 @@ class Vaela : public Plugin, public InputEventFilter {
     QPointer<Window> target, lastWindow;
     QPointer<LogicalOutput> radialOutput; // where a held right button opened the radial menu
     bool down = false, radial = false, passthroughRight = false, arranging = false, tilerCheckPending = false;
+    // A right drag in a viewport app: the app has the button, and Vaela only watches the stroke.
+    // sharedOut: the app locked or confined the pointer (its 3D view is steering), or Shift was
+    // held, so the stroke is the app's alone.
+    bool shared = false, sharedOut = false;
     QHash<Window *, RectF> floating;
     QHash<Window *, double> scrollWidths;
     QHash<QString, QVector<double>> columns, rows, lastRows; // lastRows: an incomplete last row's own widths
@@ -116,10 +120,14 @@ class Vaela : public Plugin, public InputEventFilter {
         rows[key]=Layout::resize(heights,index/nc,requested.height(),100);
     }
     QString appId(Window *w) const { auto id=w->desktopFileName(); return id.isEmpty() ? w->resourceClass() : id; }
-    // Apps that need the right button unmodified: Unreal's viewport camera turns off while Shift is held.
-    bool keepsRightButton(Window *w) const {
+    // Apps that need the right button unmodified everywhere in their windows.
+    bool keepsRightButton(Window *w) const {return listed(w,"RightButtonApps",QString());}
+    // Apps that need the right button unmodified in a 3D view, which takes the pointer while it
+    // steers: Unreal's viewport camera turns off while Shift is held. Elsewhere in them gestures work.
+    bool viewportApp(Window *w) const {return listed(w,"ViewportApps",QStringLiteral("UnrealEditor"));}
+    bool listed(Window *w, const char *key, const QString &fallback) const {
         if(!w) return false;
-        for(const auto &entry:KConfigGroup(config,"General").readEntry("RightButtonApps",QStringLiteral("UnrealEditor")).split(',',Qt::SkipEmptyParts)) {
+        for(const auto &entry:KConfigGroup(config,"General").readEntry(key,fallback).split(',',Qt::SkipEmptyParts)) {
             const auto app=entry.trimmed();
             if(app.isEmpty()) continue;
             for(const auto &id:{w->desktopFileName(),w->resourceClass(),w->resourceName()}) if(!id.compare(app,Qt::CaseInsensitive)) return true;
@@ -434,7 +442,7 @@ public:
         QTimer::singleShot(0,this,&Vaela::suspendKarousel);
         QDBusConnection::sessionBus().registerService("org.vaela.Controller");
         QDBusConnection::sessionBus().registerObject("/Controller",this,QDBusConnection::ExportAllSlots|QDBusConnection::ExportAllSignals);
-        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;passthroughRight=false;target=nullptr;capturedKeys.clear();recording.clear();backgroundTimer.start();});
+        connect(waylandServer(),&WaylandServer::lockStateChanged,this,[this]{stopHold();down=false;radial=false;passthroughRight=false;shared=false;target=nullptr;capturedKeys.clear();recording.clear();backgroundTimer.start();});
         // Window moves and resizes arrive in bursts; the wallpaper hears the outcome once.
         backgroundTimer.setSingleShot(true); backgroundTimer.setInterval(60);
         connect(&backgroundTimer,&QTimer::timeout,this,&Vaela::updateBackgrounds);
@@ -499,9 +507,20 @@ public:
     }
     bool pointerButton(PointerButtonEvent *e) override {
         if(qEnvironmentVariable("VAELA_SESSION")!="1") return false;
-        if(locked()) {stopHold();down=false;radial=false;passthroughRight=false;return false;}
+        if(locked()) {stopHold();down=false;radial=false;passthroughRight=false;shared=false;return false;}
         if(passthroughRight) {
             if(e->button==Qt::RightButton && e->state==PointerButtonState::Released) passthroughRight=false;
+            return false;
+        }
+        if(shared) {
+            if(e->button==Qt::RightButton && e->state==PointerButtonState::Released) {
+                shared=false;
+                const auto stroke=gesture.directions;
+                const QPointer<Window> w=target;target=nullptr;
+                // After the app has its release, so it is not left holding the button.
+                if(!sharedOut && !input()->pointer()->isConstrained() && !stroke.isEmpty())
+                    QTimer::singleShot(0,this,[this,stroke,w]{target=w;runGesture(stroke);});
+            }
             return false;
         }
         // Where nothing of this monitor lies under the pointer, a window reaching over from another
@@ -514,6 +533,12 @@ public:
             config->reparseConfiguration();
             if((e->modifiers.testFlag(Qt::ShiftModifier) || keepsRightButton(input()->pointer()->focus())) && !unseen) {
                 passthroughRight=true;return false;
+            }
+            // No radial menu here: the app has the press, and would get the release on the menu.
+            if(auto w=input()->pointer()->focus(); viewportApp(w) && appWindow(w) && !unseen
+               && KConfigGroup(config,"General").readEntry("Gestures",true) && covers(workspace()->outputAt(e->position))) {
+                shared=true;sharedOut=false;gesture.begin(e->position);target=w;
+                return false;
             }
             if(!KConfigGroup(config,"General").readEntry("Gestures",true) || e->modifiers.testFlag(Qt::ShiftModifier)
                 || !covers(workspace()->outputAt(e->position))) {
@@ -537,20 +562,27 @@ public:
         if(!down) return false;
         down=false;stopHold();
         if(radial) {radial=false; ui("radial-release",e->position,radialOutput);return true;}
-        if(!gesture.directions.isEmpty()) {
-            static const QHash<QString,QString> actions={{"L","previous"},{"R","next"},{"U","maximize"},{"D","close"},{"DR","close"},{"UD","cycle-layout"},{"DU","terminal"},{"UL","activities"},{"UR","commands"},{"RU","send-next"},{"LU","send-previous"}};
-            action(KConfigGroup(config,"Bindings").readEntry(gesture.directions,actions.value(gesture.directions)));
-        } else {
+        if(!gesture.directions.isEmpty()) runGesture(gesture.directions);
+        else {
             // Send a balanced click without changing the physical button state in KWin.
             if(!pressUnseen) contextClick();
         }
         target=nullptr; return true;
+    }
+    void runGesture(const QString &directions) {
+        static const QHash<QString,QString> actions={{"L","previous"},{"R","next"},{"U","maximize"},{"D","close"},{"DR","close"},{"UD","cycle-layout"},{"DU","terminal"},{"UL","activities"},{"UR","commands"},{"RU","send-next"},{"LU","send-previous"}};
+        action(KConfigGroup(config,"Bindings").readEntry(directions,actions.value(directions)));
     }
     bool pointerAxis(PointerAxisEvent *e) override {
         return !passthroughRight && !locked() && overhang(input()->pointer()->focus(),e->position);
     }
     bool pointerMotion(PointerMotionEvent *e) override {
         if(passthroughRight) return false;
+        if(shared) {
+            if(input()->pointer()->isConstrained() || e->modifiers.testFlag(Qt::ShiftModifier)) sharedOut=true;
+            if(!sharedOut && !locked()) gesture.update(e->position,std::clamp(KConfigGroup(config,"General").readEntry("Threshold",28),12,120));
+            return false;
+        }
         if(down && !locked() && e->modifiers.testFlag(Qt::ShiftModifier)) {passRightDrag();return false;}
         if(auto under=workspace()->outputAt(e->position); under!=pointerOutput) {pointerOutput=under;lowerOverhangs(under);}
         if(!down) return false;

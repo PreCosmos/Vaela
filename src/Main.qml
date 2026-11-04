@@ -621,14 +621,18 @@ QtObject {
                             }
                             Card {
                                 title: "Mouse gestures"
-                                subtitle: "Hold the right button still for the radial menu, move onto an item and release to open it. A quick right-click opens the app's own menu. Draw with the right button for gestures. Shift + right-click skips Vaela, and listed apps always get the right button themselves."
+                                subtitle: "Hold the right button still for the radial menu, move onto an item and release to open it. A quick right-click opens the app's own menu. Draw with the right button for gestures. Shift + right-click skips Vaela. Apps in the first list always get the right button; apps in the second keep it while their 3D view steers the camera, and gestures work in the rest of their window."
                                 SettingRow {
                                     label: "Right-button gestures and radial menu"
                                     Switch {checked: vaela.gestures; onToggled: vaela.setting("Gestures",checked)}
                                 }
                                 SettingRow {
                                     label: "Apps that keep the right button (comma-separated)"
-                                    TextField {text: vaela.rightButtonApps; placeholderText: "UnrealEditor"; Layout.preferredWidth: 200; onEditingFinished: vaela.setting("RightButtonApps",text)}
+                                    TextField {text: vaela.rightButtonApps; placeholderText: "app IDs"; Layout.preferredWidth: 200; onEditingFinished: vaela.setting("RightButtonApps",text)}
+                                }
+                                SettingRow {
+                                    label: "Apps whose 3D view keeps the right button (comma-separated)"
+                                    TextField {text: vaela.viewportApps; placeholderText: "UnrealEditor"; Layout.preferredWidth: 200; onEditingFinished: vaela.setting("ViewportApps",text)}
                                 }
                                 SettingRow {
                                     label: "Stroke length before a gesture starts"

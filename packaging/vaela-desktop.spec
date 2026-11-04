@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.3.5
+Version:        1.3.6
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -91,6 +91,11 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Wed Nov 04 2026 Vaela contributors - 1.3.6-1
+- Unreal Editor keeps the right button only in its 3D viewport: Vaela passes the press on at once
+  and stays out when the app locks the pointer to steer its camera; elsewhere in the window a
+  drawn stroke runs its gesture on release. Set under "Apps whose 3D view keeps the right button".
+
 * Wed Nov 04 2026 Vaela contributors - 1.3.5-1
 - Build for Bazzite 45 with KWin 6.8, so the package installs there again.
 

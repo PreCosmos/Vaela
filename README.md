@@ -139,10 +139,13 @@ Shift can be pressed before or after the right button; the drag stays passed thr
 until the button is released, even if Shift is released first.
 
 Some applications need the right button without Shift: Unreal Editor turns its
-viewport camera off while Shift is held. Apps listed under *Apps that keep the right
-button* in Vaela Settings get every right-button press directly, with no gestures or
-radial menu over their windows. The list holds window classes or desktop file names
-and starts with `UnrealEditor`.
+viewport camera off while Shift is held. Apps listed under *Apps whose 3D view keeps
+the right button* (starting with `UnrealEditor`) get every right-button press at once.
+When the app takes the pointer to steer its camera, as Unreal's viewport does, Vaela
+stays out of that drag; elsewhere in the window a drawn stroke still runs its gesture
+once the button is released. The radial menu doesn't open over these apps.
+Apps listed under *Apps that keep the right button* get it everywhere, with no
+gestures or radial menu. Both lists hold window classes or desktop file names.
 
 | Stroke | Default action |
 |---|---|
