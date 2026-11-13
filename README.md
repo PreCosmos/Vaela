@@ -43,13 +43,26 @@ login screen.
 
 ## Requirements
 
-- Fedora 44 or 45, or a Fedora Atomic image based on them (Bazzite, Kinoite, Silverblue), x86_64.
-- **KWin 6.7.5,** which both releases ship in their updates. Vaela's KWin plugin uses
-  KWin's internal interfaces, so each Vaela build works only with the KWin version it
-  was compiled against. The RPM requires that exact version; after a KWin update,
-  rebuild Vaela.
+- Arch Linux or CachyOS, or Fedora 44/45 and their Atomic derivatives, x86_64.
+- A matching KWin build. Vaela uses KWin's internal interfaces and must be rebuilt
+  after KWin updates. The Arch package pins the upstream KWin version it builds
+  against. Arch support is built for Plasma/KWin 6.8.2 and Qt 6.12.
 
 ## Installing
+
+**Arch Linux / CachyOS**
+
+Download the `.pkg.tar.zst` from the [releases page](https://github.com/PreCosmos/Vaela/releases), then install it:
+
+```bash
+sudo pacman -U ./vaela-desktop-1.3.7-1-x86_64.pkg.tar.zst
+```
+
+Log out and select **Vaela** at the login screen. Remove it with
+`sudo pacman -R vaela-desktop`. Rebuild using the instructions below if your
+KWin version differs from the release package.
+
+**Fedora**
 
 Build the RPM (see [Building](#building)) or download one from the [releases page](https://github.com/PreCosmos/Vaela/releases).
 Pick the file for your Fedora release: `fc45` for Fedora 45, `fc44` for Fedora 44.
@@ -73,8 +86,7 @@ rpm-ostree install --uninstall vela-desktop ./vaela-desktop-1.3.2-1.fc45.x86_64.
 sudo dnf install ./vaela-desktop-1.3.2-1.fc45.x86_64.rpm
 ```
 
-Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), so
-it has KWin 6.7.5.
+Make sure your system is up to date first (`rpm-ostree upgrade` or `sudo dnf upgrade`), and use a Vaela RPM built against its installed KWin version.
 
 Reboot (Atomic) or log out (Workstation), then choose **Vaela** in the session
 menu of the login screen. Installing pulls in KWin and the parts of Plasma that
@@ -271,6 +283,29 @@ remembered column widths live in `~/.config/vaelarc`; the global shortcuts live 
 `~/.config/kglobalshortcutsrc`.
 
 ## Building
+
+### Arch Linux / CachyOS
+
+Install the build dependencies (the KDE development headers come with their libraries):
+
+```bash
+sudo pacman -S --needed base-devel cmake ninja extra-cmake-modules vulkan-headers
+./scripts/build-arch.sh --syncdeps
+```
+
+The script builds the current checkout, runs the tests with Qt's offscreen backend,
+then writes the package to `packages/`. Run it as your normal user; makepkg asks
+for sudo only when dependencies need installation. `VAELA_BUILD_JOBS=4` changes
+the default of two compiler jobs. The generated PKGBUILD and checksum-verified
+source archive are in `build/arch-package/` for inspection or rebuilding.
+
+Run the integration tests in a private KWin session:
+
+```bash
+VAELA_NATIVE=1 ./scripts/test-headless.sh
+```
+
+### Fedora
 
 Everything builds in a Fedora [distrobox](https://distrobox.it): `vela-dev` for
 Fedora 45, with its home in `.devbox/home` inside the checkout. Prefix any script

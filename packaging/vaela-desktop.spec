@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.3.6
+Version:        1.3.7
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -91,6 +91,9 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Fri Nov 13 2026 Vaela contributors - 1.3.7-1
+- Add native Arch Linux and CachyOS packaging for Plasma/KWin 6.8.2 and Qt 6.12.
+
 * Wed Nov 04 2026 Vaela contributors - 1.3.6-1
 - Unreal Editor keeps the right button only in its 3D viewport: Vaela passes the press on at once
   and stays out when the app locks the pointer to steer its camera; elsewhere in the window a
