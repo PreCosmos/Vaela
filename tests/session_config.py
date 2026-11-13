@@ -96,6 +96,74 @@ class SessionConfigTest(unittest.TestCase):
                      LAYOUT.replace("Previous=org.kde.image", "Previous=org.vaela.background")):
             self.assertIn("wallpaperplugin=org.kde.image", launcher.restore_plasma_wallpaper(text))
 
+    def test_orphaned_wallpaper_is_recovered_for_both_sessions(self):
+        original = """[Containments][4][Wallpaper][org.kde.image][General]
+Image=/pictures/north.png
+PreviewImage=/pictures/north.png
+FillMode=1
+
+[Containments][43]
+activityId=current-activity
+plugin=org.kde.plasma.folder
+wallpaperplugin=org.kde.image
+"""
+        self.layout.write_text(original)
+        self.private.mkdir()
+        private_layout = self.private / self.layout.name
+        private_layout.write_text(original)
+        launcher.configure(False)
+        for layout in (self.layout, private_layout):
+            parsed = launcher.configparser.RawConfigParser()
+            parsed.read(layout)
+            section = "Containments][43][Wallpaper][org.kde.image][General"
+            self.assertEqual(parsed[section]["Image"], "/pictures/north.png")
+            self.assertEqual(parsed[section]["FillMode"], "1")
+            self.assertEqual(layout.with_name(layout.name + ".pre-vaela-wallpaper-repair").read_text(), original)
+        # A second launch must leave the repaired file and original backup alone.
+        repaired = self.layout.read_text()
+        launcher.configure(False)
+        self.assertEqual(self.layout.read_text(), repaired)
+
+    def test_restoring_image_plugin_recovers_its_saved_fallback(self):
+        original = LAYOUT.replace(
+            "[Containments][1][Wallpaper][org.kde.image][General]\nImage=/pictures/desktop.jpg\n", "")
+        self.layout.write_text(original)
+        launcher.configure(False)
+        self.assertIn("wallpaperplugin=org.kde.image", self.layout.read_text())
+        self.assertIn("[Containments][1][Wallpaper][org.kde.image][General]\nImage=/pictures/desktop.jpg", self.layout.read_text())
+
+    def test_existing_wallpapers_and_ambiguous_orphans_are_preserved(self):
+        desktop = "[Containments][43]\nplugin=org.kde.plasma.folder\nwallpaperplugin=org.kde.image\n"
+        orphan = "[Containments][4][Wallpaper][org.kde.image][General]\nImage=/pictures/old.png\n"
+        for original in (
+            desktop + orphan + "[Containments][43][Wallpaper][org.kde.image][General]\nImage=/pictures/current.png\n",
+            desktop + orphan + "[Containments][5][Wallpaper][org.kde.image][General]\nImage=/pictures/other.png\n",
+            desktop.replace("org.kde.image", "org.kde.slideshow") + orphan,
+            desktop.replace("org.kde.plasma.folder", "org.kde.panel") + orphan,
+            desktop,
+        ):
+            with self.subTest(layout=original):
+                self.layout.write_text(original)
+                launcher.configure(False)
+                self.assertEqual(self.layout.read_text(), original)
+    def test_empty_image_keeps_desktop_options_and_ignores_live_donors(self):
+        original = """[Containments][43]
+plugin=org.kde.plasma.folder
+wallpaperplugin=org.kde.image
+[Containments][43][Wallpaper][org.kde.image][General]
+Image=
+FillMode=2
+[Containments][4][Wallpaper][org.kde.image][General]
+Image=/pictures/old.png
+FillMode=1
+"""
+        repaired = launcher.repair_image_wallpapers(original)
+        self.assertIn("Image=/pictures/old.png\nFillMode=2", repaired)
+        self.assertEqual(launcher.repair_image_wallpapers(repaired), repaired)
+        # A second desktop's wallpaper must never be mistaken for an orphan.
+        live = original + "[Containments][4]\nplugin=org.kde.plasma.folder\nwallpaperplugin=org.kde.image\n"
+        self.assertEqual(launcher.repair_image_wallpapers(live), live)
+
 
 if __name__ == "__main__":
     unittest.main()

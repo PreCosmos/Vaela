@@ -42,6 +42,66 @@ def restore_plasma_wallpaper(text):
     return "".join(blocks)
 
 
+def repair_image_wallpapers(text):
+    # Desktop IDs can change while wallpaper groups for the old IDs survive. Recover
+    # only a missing image, and only when its source is unambiguous. Keep KConfig's
+    # unrelated groups and formatting intact rather than rewriting them with INI tools.
+    blocks = re.split(r"(?=^\[)", text, flags=re.M)
+    desktops, images, fallbacks, containments = {}, {}, {}, set()
+
+    def values(block):
+        return dict(re.findall(r"^([^=\n]+)=(.*)$", block, re.M))
+
+    for index, block in enumerate(blocks):
+        match = re.match(r"\[Containments\]\[(\d+)\]\n", block)
+        if match:
+            ident = match[1]
+            containments.add(ident)
+            settings = values(block)
+            if (settings.get("plugin") in ("org.kde.plasma.folder", "org.kde.desktopcontainment")
+                    and settings.get("wallpaperplugin", "org.kde.image") == "org.kde.image"):
+                desktops[ident] = settings
+        match = re.match(r"\[Containments\]\[(\d+)\]\[Wallpaper\]\[org.kde.image\]\[General\]\n", block)
+        if match:
+            images[match[1]] = (index, values(block))
+        match = re.match(r"\[Containments\]\[(\d+)\]\[Wallpaper\]\[org.vaela.background\]\[General\]\n", block)
+        if match:
+            fallbacks[match[1]] = values(block).get("Fallback", "")
+
+    orphans = [settings for ident, (_, settings) in images.items()
+               if ident not in containments and settings.get("Image")]
+    for ident in desktops:
+        index, settings = images.get(ident, (None, {}))
+        if settings.get("Image"):
+            continue
+        if fallbacks.get(ident):
+            recovered = {"Image": fallbacks[ident]}
+        elif len(orphans) == 1:
+            recovered = orphans[0]
+        else:
+            continue
+        if index is None:
+            blocks.append(f"\n[Containments][{ident}][Wallpaper][org.kde.image][General]\n"
+                          + "".join(f"{key}={value}\n" for key, value in recovered.items()))
+        else:
+            block = blocks[index]
+            if "Image" in settings:
+                block = re.sub(r"^Image=.*$", lambda _: "Image=" + recovered["Image"], block, flags=re.M)
+            if not block.endswith("\n"):
+                block += "\n"
+            block += "".join(f"{key}={value}\n" for key, value in recovered.items() if key not in settings)
+            blocks[index] = block
+    return "".join(blocks)
+
+
+def save_repair(layout, original, repaired, suffix):
+    if repaired != original:
+        backup = layout.with_name(layout.name + suffix)
+        if not backup.exists():
+            shutil.copy2(layout, backup)
+        layout.write_text(repaired)
+
+
 def merge_mimeapps(private, base):
     # Apps started from the shell inherit its config home and may save handlers there. KDE's
     # shared application database records every mimeapps.list it can see, so one that only the
@@ -91,11 +151,13 @@ def configure(vaela):
                     shutil.copyfileobj(src, dst)
     # Upgrade older versions that selected Vaela's wallpaper in the shared layout.
     # Save the Vaela layout above before handing the regular desktop back to Plasma.
-    if restored != original:
-        backup = layout.with_name(layout.name + ".pre-vaela-isolation")
-        if not backup.exists():
-            shutil.copy2(layout, backup)
-        layout.write_text(restored)
+    save_repair(layout, original, restored, ".pre-vaela-isolation")
+    save_repair(layout, restored, repair_image_wallpapers(restored), ".pre-vaela-wallpaper-repair")
+    private_layout = private / layout.name
+    if private_layout.is_file():
+        original_private = private_layout.read_text()
+        save_repair(private_layout, original_private, repair_image_wallpapers(original_private),
+                    ".pre-vaela-wallpaper-repair")
     if vaela:
         merge_mimeapps(private, base)
         os.environ["XDG_CONFIG_HOME"] = str(private)

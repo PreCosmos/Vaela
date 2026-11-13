@@ -55,7 +55,7 @@ login screen.
 Download the `.pkg.tar.zst` from the [releases page](https://github.com/PreCosmos/Vaela/releases), then install it:
 
 ```bash
-sudo pacman -U ./vaela-desktop-1.3.7-1-x86_64.pkg.tar.zst
+sudo pacman -U ./vaela-desktop-1.3.8-1-x86_64.pkg.tar.zst
 ```
 
 Log out and select **Vaela** at the login screen. Remove it with
@@ -263,6 +263,13 @@ Vaela keeps its Plasma shell layout and panel settings in
 Existing shell settings are copied on Vaela's first launch; other user settings
 are inherited as defaults. This separation does not change system account files
 or their permissions.
+
+At shell startup, Vaela also repairs a missing Plasma image when it can recover
+the desktop's saved fallback or a single orphaned wallpaper entry. Existing
+wallpaper choices are preserved. Each repaired layout is backed up alongside
+the original with a `.pre-vaela-wallpaper-repair` suffix. This applies to both
+the regular Plasma layout and Vaela's private copy; log out and back in after
+upgrading to apply it.
 
 Open **Vaela Settings** (Meta+Ctrl+S, the gear in the layout switch, or the
 radial menu) to set the gap between windows, choose workspace backgrounds, turn

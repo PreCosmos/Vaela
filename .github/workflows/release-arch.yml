@@ -1,0 +1,72 @@
+name: Release Arch package
+
+on:
+  push:
+    branches: [main]
+    paths: [CMakeLists.txt]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-arch
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the exact release commit
+        run: |
+          git init source
+          git -C source remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          git -C source fetch --depth=1 origin "$GITHUB_SHA"
+          git -C source checkout --detach FETCH_HEAD
+
+      - name: Read version and check for an existing release
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^project(vaela VERSION \([^ ]*\).*/\1/p' source/CMakeLists.txt)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "number=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and test in Arch Linux
+        if: steps.version.outputs.exists != 'true'
+        run: |
+          docker run --rm -v "$PWD/source:/build" -w /build archlinux:base-devel bash -euc '
+            pacman -Syu --noconfirm sudo git
+            useradd --create-home builder
+            echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
+            chown -R builder:builder /build
+            sudo -u builder bash scripts/build-arch.sh --syncdeps --noconfirm
+          '
+
+      - name: Assemble release files
+        if: steps.version.outputs.exists != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          mkdir release
+          cp "source/packages/vaela-desktop-$VERSION-1-x86_64.pkg.tar.zst" release/
+          cp "source/build/arch-package/vaela-desktop-$VERSION.tar.gz" release/
+          cp source/build/arch-package/PKGBUILD release/
+          cd release
+          sha256sum PKGBUILD *.pkg.tar.zst *.tar.gz > SHA256SUMS
+
+      - name: Publish tested Arch preview
+        if: steps.version.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          gh release create "v$VERSION" release/* --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --draft --prerelease \
+            --title "Vaela $VERSION — Plasma wallpaper recovery" \
+            --notes-file "source/docs/releases/$VERSION.md"
+          gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false
