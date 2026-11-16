@@ -67,6 +67,6 @@ jobs:
         run: |
           gh release create "v$VERSION" release/* --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --draft --prerelease \
-            --title "Vaela $VERSION — Plasma wallpaper recovery" \
-            --notes-file "source/docs/releases/$VERSION.md"
+            --title "Vaela $VERSION — $(sed -n '1s/^# //p' "source/docs/releases/$VERSION.md")" \
+            --notes-file <(tail -n +3 "source/docs/releases/$VERSION.md")
           gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false

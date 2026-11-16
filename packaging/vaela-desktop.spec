@@ -1,5 +1,5 @@
 Name:           vaela-desktop
-Version:        1.3.8
+Version:        1.3.9
 Release:        1%{?dist}
 Summary:        Vaela, a Vivaldi-style desktop built on KWin
 License:        GPL-2.0-or-later
@@ -91,6 +91,10 @@ ctest --test-dir %{__cmake_builddir} --output-on-failure
 %config(noreplace) %{_sysconfdir}/xdg/autostart/vaela-shell.desktop
 
 %changelog
+* Mon Nov 16 2026 Vaela contributors - 1.3.9-1
+- Leave full-screen windows alone: no mouse gestures or radial menu on them.
+- Hide the layout switch and workspace bar handles on a monitor showing a full-screen window.
+
 * Fri Nov 13 2026 Vaela contributors - 1.3.8-1
 - Recover missing desktop images from saved fallbacks or unambiguous orphan wallpaper groups.
 - Back up and repair both regular Plasma and Vaela layouts at shell startup.

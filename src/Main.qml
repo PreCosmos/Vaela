@@ -59,6 +59,8 @@ QtObject {
         if(on) names.push(name)
         if(outputs.some(o=>names.includes(o.name))) vaela.setting("Monitors",names.join(","))
     }
+    // Whether a monitor shows a full-screen window, where the layout switch and workspace bar stay hidden.
+    function fullScreen(screen) {return (vaela.state.outputs || []).some(o=>o.name === screen && o.fullscreen)}
     function fileName(url) {return url ? decodeURIComponent(String(url).replace(/\/$/, "").split("/").pop()) : ""}
     // Opens Settings with the file picker for one workspace's background.
     function chooseBackground(desktop,screen,x,y) {
@@ -221,7 +223,8 @@ QtObject {
             property bool placed:false
             width: expanded ? switchPanel.implicitWidth + 8 : 160
             height: expanded ? 38 : 6; color: "transparent"
-            visible: placed && !!vaela.state.mode
+            visible: placed && !!vaela.state.mode && !root.fullScreen(modelData)
+            onVisibleChanged: if(!visible) expanded=false
             flags: Qt.FramelessWindowHint
             Component.onCompleted: {root.applyPalette(topWindow);vaela.layer(topWindow,"top",0,0,modelData);placed=true}
             HoverHandler {
@@ -273,7 +276,8 @@ QtObject {
             readonly property bool opened: expanded || openMenus>0 || rename.visible
             width: opened ? 276 : 10
             height: Math.min(Screen.height-120,Math.max(170,(vaela.state.desktops || []).length*66+118))
-            color: "transparent"; visible: placed && !!vaela.state.mode
+            color: "transparent"; visible: placed && !!vaela.state.mode && !root.fullScreen(modelData)
+            onVisibleChanged: if(!visible) expanded=false
             flags: Qt.FramelessWindowHint
             Component.onCompleted: {root.applyPalette(tabsWindow);vaela.layer(tabsWindow,"tabs",0,0,modelData);placed=true}
             HoverHandler {

@@ -55,7 +55,7 @@ login screen.
 Download the `.pkg.tar.zst` from the [releases page](https://github.com/PreCosmos/Vaela/releases), then install it:
 
 ```bash
-sudo pacman -U ./vaela-desktop-1.3.8-1-x86_64.pkg.tar.zst
+sudo pacman -U ./vaela-desktop-1.3.9-1-x86_64.pkg.tar.zst
 ```
 
 Log out and select **Vaela** at the login screen. Remove it with
@@ -158,6 +158,11 @@ stays out of that drag; elsewhere in the window a drawn stroke still runs its ge
 once the button is released. The radial menu doesn't open over these apps.
 Apps listed under *Apps that keep the right button* get it everywhere, with no
 gestures or radial menu. Both lists hold window classes or desktop file names.
+
+Full-screen windows, such as games and video players, are left alone: the right
+button goes straight to them, with no gestures or radial menu, and the handles of
+the layout switch and workspace bar are hidden on a monitor while its topmost
+window is full screen.
 
 | Stroke | Default action |
 |---|---|

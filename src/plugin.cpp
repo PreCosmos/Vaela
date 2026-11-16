@@ -288,6 +288,28 @@ class Vaela : public Plugin, public InputEventFilter {
         for(const QRect &r:covered) area+=qint64(r.width())*r.height();
         return area*100>=qint64(screen.width())*screen.height()*85;
     }
+    // The topmost window drawn at pos, of any kind; one reaching over from another monitor is not.
+    Window *windowAt(const QPointF &pos) const {
+        const auto stack=workspace()->stackingOrder();
+        for(auto it=stack.crbegin();it!=stack.crend();++it) {
+            auto w=*it;
+            if(!overhang(w,pos) && w->isOnCurrentDesktop() && w->isOnCurrentActivity() && !w->isMinimized() && w->frameGeometry().contains(pos)) return w;
+        }
+        return nullptr;
+    }
+    // Whether a monitor shows a full-screen window: its topmost application window is one. Vaela
+    // stays out of the way there, with no gestures on the window and no handles at the edges.
+    bool fullScreen(LogicalOutput *output) const {
+        const QRectF inside=output->geometryF().adjusted(1,1,-1,-1);
+        const auto stack=workspace()->stackingOrder();
+        for(auto it=stack.crbegin();it!=stack.crend();++it) {
+            auto w=*it;
+            if(!appWindow(w) || !w->isShown() || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) continue;
+            const auto home=w->property("vaelaHome").toString();
+            if(QRectF(w->frameGeometry()).intersects(inside) && (home.isEmpty() || home==output->name())) return w->isFullScreen();
+        }
+        return false;
+    }
     void updateBackgrounds() {
         const auto json=backgrounds();
         if(json!=lastBackgrounds) {lastBackgrounds=json;Q_EMIT backgroundsChanged(json);}
@@ -531,7 +553,10 @@ public:
         if(e->button!=Qt::RightButton) return false;
         if(e->state==PointerButtonState::Pressed) {
             config->reparseConfiguration();
-            if((e->modifiers.testFlag(Qt::ShiftModifier) || keepsRightButton(input()->pointer()->focus())) && !unseen) {
+            const auto under=windowAt(e->position);
+            // A full-screen window (a game, a video) has the right button to itself.
+            const bool fullScreenUnder=appWindow(under) && under->isFullScreen();
+            if((e->modifiers.testFlag(Qt::ShiftModifier) || fullScreenUnder || keepsRightButton(input()->pointer()->focus())) && !unseen) {
                 passthroughRight=true;return false;
             }
             // No radial menu here: the app has the press, and would get the release on the menu.
@@ -546,17 +571,9 @@ public:
                 return unseen;
             }
             gesture.begin(e->position);down=true;radial=false;target=nullptr;pressUnseen=unseen;
-            auto stack=workspace()->stackingOrder();
-            for(auto it=stack.crbegin();it!=stack.crend();++it) {
-                auto w=*it;
-                if(overhang(w,e->position)) continue;
-                if(w->isOnCurrentDesktop() && w->isOnCurrentActivity() && !w->isMinimized() && w->frameGeometry().contains(e->position)) {
-                    // Let shell UI, panels and desktop handle their own context menus.
-                    if(!appWindow(w) && !w->isDesktop()) {down=false;return false;}
-                    if(appWindow(w)) {target=w;workspace()->activateWindow(w);}
-                    break;
-                }
-            }
+            // Let shell UI, panels and desktop handle their own context menus.
+            if(under && !appWindow(under) && !under->isDesktop()) {down=false;return false;}
+            if(appWindow(under)) {target=under;workspace()->activateWindow(under);}
             hold.start(std::clamp(KConfigGroup(config,"General").readEntry("RadialDelay",500),150,2000));return true;
         }
         if(!down) return false;
@@ -611,7 +628,7 @@ public Q_SLOTS:
         QJsonArray outputs; const auto order=workspace()->outputOrder();
         for(auto o:order) {
             const auto label=(o->manufacturer()+" "+o->model()).trimmed();
-            outputs.append(QJsonObject{{"name",o->name()},{"label",label.isEmpty() ? o->name() : label},{"primary",o==order.first()},{"covered",covers(o)}});
+            outputs.append(QJsonObject{{"name",o->name()},{"label",label.isEmpty() ? o->name() : label},{"primary",o==order.first()},{"covered",covers(o)},{"fullscreen",fullScreen(o)}});
         }
         QJsonArray keys;
         for(auto a:globals) keys.append(QJsonObject{{"id",a->objectName()},{"label",a->text()},{"keys",keyText(KGlobalAccel::self()->shortcut(a))},{"default",keyText(KGlobalAccel::self()->defaultShortcut(a))}});

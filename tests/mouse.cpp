@@ -199,6 +199,35 @@ private Q_SLOTS:
         window.setContextMenuPolicy(Qt::DefaultContextMenu);
         QProcess::execute("kwriteconfig6",key+QStringList{"--delete"});
     }
+    void fullScreenWindowIsLeftAlone() {
+        auto fullScreen=[&] {
+            const auto s=QJsonDocument::fromJson(controller.call("state").arguments().first().toString().toUtf8()).object();
+            return s["outputs"].toArray().first().toObject()["fullscreen"].toBool();
+        };
+        QVERIFY(!fullScreen());
+        QVERIFY(probe.call("workspaceBar",false,0).arguments().first().toBool());
+        window.setContextMenuPolicy(Qt::NoContextMenu);
+        window.showFullScreen();
+        QTRY_VERIFY(fullScreen());
+        // The workspace bar and the layout switch's handle (160x6) go away.
+        QTRY_VERIFY(!probe.call("workspaceBar",false,0).arguments().first().toBool());
+        QTRY_COMPARE(probe.call("sized",160,6).arguments().first().toString(),QString("{}"));
+        QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
+        const int presses=window.presses,releases=window.releases,moves=window.rightMoves,current=desktop();
+        // The press arrives at once; a stroke is the window's own drag, and holding opens no menu.
+        button(true);QTRY_COMPARE(window.presses,presses+1);
+        probe.call("relative",40.,0.);QTest::qWait(50);probe.call("relative",40.,0.);
+        QTRY_VERIFY(window.rightMoves>moves);
+        QTest::qWait(650);QVERIFY(!probe.call("radialVisible").arguments().first().toBool());
+        button(false);QTRY_COMPARE(window.releases,releases+1);
+        QTest::qWait(150);QCOMPARE(desktop(),current);QVERIFY(!window.closed);
+        window.showNormal();
+        QTRY_VERIFY(!fullScreen());
+        QTRY_VERIFY(probe.call("workspaceBar",false,0).arguments().first().toBool());
+        QTRY_VERIFY(probe.call("sized",160,6).arguments().first().toString()!="{}");
+        window.setContextMenuPolicy(Qt::DefaultContextMenu);
+        QTest::qWait(300);
+    }
     void downGestureClosesHoveredWindow() {
         QVERIFY(probe.call("hover","Vaela mouse test").arguments().first().toBool());QTest::qWait(100);
         button(true);
